@@ -1,0 +1,5 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">JARVIS AI</string>
+    <string name="jarvis_accessibility_description">Enables JARVIS AI to read visible UI elements and execute user-directed taps, text input, and navigation gestures with explicit confirmation on sensitive actions.</string>
+</resources>

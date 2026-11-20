@@ -1,0 +1,12 @@
+{
+  "name": "JARVIS AI",
+  "description": "Advanced futuristic personal AI assistant with real-time holographic voice orb, multi-AI provider routing, dual personalities (JARVIS & Companion), memory management, and modular Android automation.",
+  "requestFramePermissions": [
+    "microphone",
+    "geolocation",
+    "camera"
+  ],
+  "majorCapabilities": [
+    "MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"
+  ]
+}
