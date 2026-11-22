@@ -26,7 +26,6 @@ export interface ProviderStreamChunk {
 export const PROVIDER_ENV_KEY_NAMES: Record<ProviderId, string> = {
   gemini: 'GEMINI_API_KEY',
   groq: 'GROQ_API_KEY',
-  openrouter: 'OPENROUTER_API_KEY',
 };
 
 const DEFAULT_PROVIDER_MODELS: Record<ProviderId, ModelOption[]> = {
@@ -70,33 +69,10 @@ const DEFAULT_PROVIDER_MODELS: Record<ProviderId, ModelOption[]> = {
     { id: 'openai/gpt-oss-120b', label: 'Groq · GPT-OSS 120B (High Intelligence)', provider: 'groq', supportsStreaming: true },
     { id: 'allam-2-7b', label: 'Groq · Allam 2 7B', provider: 'groq', supportsStreaming: true },
   ],
-  openrouter: [
-    { id: 'google/gemini-2.5-flash', label: 'OpenRouter · Gemini Flash', provider: 'openrouter', supportsStreaming: true },
-    { id: 'meta-llama/llama-3.3-70b-instruct', label: 'OpenRouter · Llama 3.3 70B', provider: 'openrouter', supportsStreaming: true },
-    { id: 'qwen/qwen-2.5-72b-instruct', label: 'OpenRouter · Qwen 2.5 72B', provider: 'openrouter', supportsStreaming: true },
-  ],
 };
 
 function getEnvKeyForProvider(provider: ProviderId): string | undefined {
-  switch (provider) {
-    case 'gemini':
-      return process.env.GEMINI_API_KEY;
-    case 'groq':
-      return process.env.GROQ_API_KEY;
-    case 'openrouter':
-      return process.env.OPENROUTER_API_KEY;
-  }
-}
-
-function getBaseUrlForProvider(provider: ProviderId): string {
-  switch (provider) {
-    case 'groq':
-      return 'https://api.groq.com/openai/v1';
-    case 'openrouter':
-      return 'https://openrouter.ai/api/v1';
-    default:
-      return '';
-  }
+  return provider === 'gemini' ? process.env.GEMINI_API_KEY : process.env.GROQ_API_KEY;
 }
 
 export function formatFriendlyProviderError(err: unknown): string {
@@ -113,7 +89,7 @@ export function formatFriendlyProviderError(err: unknown): string {
 export function createGeminiClient(apiVersion?: string): GoogleGenAI {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey || apiKey.startsWith('MY_')) {
-    throw new Error('GEMINI_API_KEY is not configured in the server environment.');
+    throw new Error('GEMINI_API_KEY is not configured in AI Studio Secrets.');
   }
   return new GoogleGenAI({
     apiKey,
@@ -144,7 +120,6 @@ class AiProviderManager {
   private providerMeta: Record<ProviderId, Partial<ProviderInfo>> = {
     gemini: { status: ApiSecurityManager.maskKeyStatus('GEMINI_API_KEY') ? 'CONNECTED' : 'ENV_KEY_MISSING' },
     groq: { status: ApiSecurityManager.maskKeyStatus('GROQ_API_KEY') ? 'CONNECTED' : 'ENV_KEY_MISSING' },
-    openrouter: { status: ApiSecurityManager.maskKeyStatus('OPENROUTER_API_KEY') ? 'UNTESTED' : 'ENV_KEY_MISSING' },
   };
 
   private dynamicModels: Partial<Record<ProviderId, ModelOption[]>> = {};
@@ -167,9 +142,10 @@ class AiProviderManager {
     return settings.providerDefaultModels?.[provider] || DEFAULT_PROVIDER_MODELS[provider][0].id;
   }
 
-  getVoiceKeyStatuses(): { gemini: boolean; elevenlabs: boolean } {
+  getVoiceKeyStatuses(): { gemini: boolean; groq: boolean; elevenlabs: boolean } {
     return {
       gemini: ApiSecurityManager.maskKeyStatus('GEMINI_API_KEY'),
+      groq: ApiSecurityManager.maskKeyStatus('GROQ_API_KEY'),
       elevenlabs: ApiSecurityManager.maskKeyStatus('ELEVENLABS_API_KEY'),
     };
   }
@@ -178,7 +154,6 @@ class AiProviderManager {
     const names: Record<ProviderId, string> = {
       gemini: 'Google Gemini',
       groq: 'Groq',
-      openrouter: 'OpenRouter',
     };
 
     const settings = storageStore.getState().settings;
@@ -241,38 +216,23 @@ class AiProviderManager {
       }
 
       if (provider === 'gemini') {
-        const probeModels = [
-          'gemini-4-hydrogen',
-          'gemini-3.1-flash-lite',
-          'gemini-3-flash-preview',
-        ];
-        let ok = false;
-        let lastErr: unknown;
-        for (const m of probeModels) {
-          try {
-            const ai = createGeminiClient(m.includes('preview') ? 'v1beta' : undefined);
-            const thinkingLevel = mapThinkingLevel(m, 'LOW');
-            const res = await ai.models.generateContent({
-              model: m,
-              contents: 'Respond with OK.',
-              config: thinkingLevel ? { thinkingConfig: { thinkingLevel } } : undefined,
-            });
-            if (res.text) {
-              ok = true;
-              break;
-            }
-          } catch (err) {
-            lastErr = err;
+        const resp = await fetch(
+          'https://generativelanguage.googleapis.com/v1beta/models?pageSize=5',
+          {
+            headers: { 'x-goog-api-key': key },
+            signal: AbortSignal.timeout(8000),
           }
+        );
+        if (!resp.ok) {
+          const errText = await resp.text().catch(() => '');
+          throw new Error(`Gemini HTTP ${resp.status}${errText ? `: ${errText.slice(0, 140)}` : ''}`);
         }
-        if (!ok) throw lastErr || new Error('Gemini connection failed');
       } else {
-        const baseUrl = getBaseUrlForProvider(provider);
-        const resp = await fetch(`${baseUrl}/models`, {
+        const resp = await fetch('https://api.groq.com/openai/v1/models', {
           headers: { Authorization: `Bearer ${key}` },
-          signal: AbortSignal.timeout(10000),
+          signal: AbortSignal.timeout(8000),
         });
-        if (!resp.ok) throw new Error(`HTTP ${resp.status}`);
+        if (!resp.ok) throw new Error(`Groq HTTP ${resp.status}`);
       }
 
       const latency = Date.now() - start;
@@ -364,25 +324,23 @@ class AiProviderManager {
         return DEFAULT_PROVIDER_MODELS.gemini;
       }
 
-      const baseUrl = getBaseUrlForProvider(provider);
-      const resp = await fetch(`${baseUrl}/models`, {
+      const resp = await fetch('https://api.groq.com/openai/v1/models', {
         headers: { Authorization: `Bearer ${key}` },
         signal: AbortSignal.timeout(10000),
       });
-      if (!resp.ok) return DEFAULT_PROVIDER_MODELS[provider];
+      if (!resp.ok) return DEFAULT_PROVIDER_MODELS.groq;
       const json = (await resp.json()) as { data?: Array<{ id: string }> };
       if (Array.isArray(json.data) && json.data.length > 0) {
-        const filtered =
-          provider === 'groq'
-            ? json.data.filter((m) => !/whisper|orpheus|prompt-guard|safeguard/i.test(m.id))
-            : json.data;
+        const filtered = json.data.filter(
+          (m) => !/whisper|orpheus|prompt-guard|safeguard/i.test(m.id)
+        );
         const list = (filtered.length > 0 ? filtered : json.data).slice(0, 25).map((m) => ({
           id: m.id,
           label: m.id,
-          provider,
+          provider: 'groq' as ProviderId,
           supportsStreaming: true,
         }));
-        this.dynamicModels[provider] = list;
+        this.dynamicModels.groq = list;
         return list;
       }
     } catch (error) {
@@ -423,20 +381,16 @@ class AiProviderManager {
       return;
     }
 
-    const key = getEnvKeyForProvider(req.provider);
+    const key = getEnvKeyForProvider('groq');
     if (!key || key.startsWith('MY_')) {
-      throw new Error(
-        `API key for ${req.provider} (${PROVIDER_ENV_KEY_NAMES[req.provider]}) is not configured in server secrets.`
-      );
+      throw new Error('GROQ_API_KEY is not configured in AI Studio Secrets.');
     }
 
-    const baseUrl = getBaseUrlForProvider(req.provider);
-    const resp = await fetch(`${baseUrl}/chat/completions`, {
+    const resp = await fetch('https://api.groq.com/openai/v1/chat/completions', {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${key}`,
         'Content-Type': 'application/json',
-        ...(req.provider === 'openrouter' ? { 'X-Title': 'JARVIS AI' } : {}),
       },
       body: JSON.stringify({
         model: req.model,
@@ -450,7 +404,7 @@ class AiProviderManager {
       signal: AbortSignal.timeout(15000),
     });
     if (!resp.ok || !resp.body) {
-      throw new Error(`${req.provider} API error: HTTP ${resp.status}`);
+      throw new Error(`Groq API error: HTTP ${resp.status}`);
     }
 
     const reader = resp.body.getReader();

@@ -3,47 +3,138 @@ import { createGeminiClient } from './aiProviderManager.ts';
 import { AudioProcessingEngine } from './audioProcessingEngine.ts';
 import { emotionEngine } from './emotionEngine.ts';
 import { loggingDiagnostics } from './loggingDiagnostics.ts';
+import { storageStore } from './storageStore.ts';
 
 export interface TtsSynthesisResult {
   audioBase64: string;
   mimeType: 'audio/wav' | 'audio/mpeg';
   voiceUsed: string;
   modelUsed: string;
-  providerUsed: 'gemini' | 'elevenlabs';
+  providerUsed: 'gemini' | 'groq' | 'elevenlabs';
 }
 
 const ELEVENLABS_VOICE_IDS: Record<string, string> = {
-  Adam: 'pNInz6obpgDQGcFmaJgB',
-  Antoni: 'ErXwobaYiN019PkySvjV',
-  Josh: 'TxGEqnHWrfWFTfGW9XjX',
-  Rachel: '21m00Tcm4TlvDq8ikWAM',
-  Bella: 'EXAVITQu4vr4xnSDxMaL',
-  // Clean cross-mapping when Gemini persona is selected while engine is ElevenLabs
-  Charon: 'pNInz6obpgDQGcFmaJgB',
-  Fenrir: 'ErXwobaYiN019PkySvjV',
-  Puck: 'TxGEqnHWrfWFTfGW9XjX',
-  Kore: '21m00Tcm4TlvDq8ikWAM',
-  Zephyr: 'EXAVITQu4vr4xnSDxMaL',
+  // Active ElevenLabs Boys & Girls Voices
+  Adam: 'CwhRBWXzGAHq8TQ4Fs17', // Roger - Casual, Resonant Boy Voice
+  Antoni: 'IKne3meq5aSn9XLyUdCD', // Charlie - Deep, Confident Boy Voice
+  Josh: 'TX3LPaxmHKxFdv7VOQHJ', // Liam - Lively Young Boy Voice
+  George: 'JBFqnCBsd6RMkjVDRZzb', // George - Warm Natural Boy Voice
+  Rachel: 'EXAVITQu4vr4xnSDxMaL', // Sarah - Natural Expressive Girl Voice
+  Bella: 'FGY2WhTYpPnrIDTdsKH5', // Laura - Sweet Quirky Girl Voice
+  Alice: 'Xb7hH8MSUJpSbSDYk0k2', // Alice - Clear Girl Voice
+  // Cross-mapped Gemini & Groq voices when switching or falling back to ElevenLabs
+  Charon: 'IKne3meq5aSn9XLyUdCD',
+  Fenrir: 'JBFqnCBsd6RMkjVDRZzb',
+  Puck: 'TX3LPaxmHKxFdv7VOQHJ',
+  troy: 'CwhRBWXzGAHq8TQ4Fs17',
+  daniel: 'IKne3meq5aSn9XLyUdCD',
+  austin: 'TX3LPaxmHKxFdv7VOQHJ',
+  Kore: 'EXAVITQu4vr4xnSDxMaL',
+  Zephyr: 'FGY2WhTYpPnrIDTdsKH5',
+  autumn: 'EXAVITQu4vr4xnSDxMaL',
+  diana: 'FGY2WhTYpPnrIDTdsKH5',
+  hannah: 'Xb7hH8MSUJpSbSDYk0k2',
 };
 
-const ELEVEN_TO_GEMINI_VOICE: Record<string, string> = {
-  Adam: 'Charon',
-  Antoni: 'Fenrir',
-  Josh: 'Puck',
-  Rachel: 'Kore',
-  Bella: 'Zephyr',
+const TO_GEMINI_VOICE: Record<string, string> = {
   Charon: 'Charon',
   Fenrir: 'Fenrir',
   Puck: 'Puck',
   Kore: 'Kore',
   Zephyr: 'Zephyr',
+  Adam: 'Charon',
+  Antoni: 'Fenrir',
+  Josh: 'Puck',
+  troy: 'Charon',
+  daniel: 'Fenrir',
+  austin: 'Puck',
+  Rachel: 'Kore',
+  Bella: 'Zephyr',
+  autumn: 'Kore',
+  diana: 'Zephyr',
+  hannah: 'Kore',
+};
+
+const TO_GROQ_VOICE: Record<string, string> = {
+  troy: 'troy',
+  daniel: 'daniel',
+  austin: 'austin',
+  autumn: 'autumn',
+  diana: 'diana',
+  hannah: 'hannah',
+  Charon: 'troy',
+  Fenrir: 'daniel',
+  Puck: 'austin',
+  Adam: 'troy',
+  Antoni: 'daniel',
+  Josh: 'austin',
+  Kore: 'autumn',
+  Zephyr: 'diana',
+  Rachel: 'autumn',
+  Bella: 'hannah',
 };
 
 class TextToSpeechEngine {
-  private async synthesizeElevenLabs(
+  private async synthesizeGroq(
     cleanText: string,
     personality: PersonalityId,
     voice: VoiceSettings
+  ): Promise<TtsSynthesisResult> {
+    const key = process.env.GROQ_API_KEY;
+    if (!key || key.startsWith('MY_')) {
+      throw new Error('Groq Voice selected, but GROQ_API_KEY is not configured in AI Studio Secrets.');
+    }
+
+    const defaultGroq = personality === 'girl' || voice.gender === 'female' ? 'autumn' : 'troy';
+    const voiceName = TO_GROQ_VOICE[voice.voiceName] || defaultGroq;
+    const modelId = 'canopylabs/orpheus-v1-english';
+
+    const resp = await fetch('https://api.groq.com/openai/v1/audio/speech', {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${key}`,
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        model: modelId,
+        input: cleanText,
+        voice: voiceName,
+        response_format: 'wav',
+      }),
+      signal: AbortSignal.timeout(15000),
+    });
+
+    if (!resp.ok) {
+      const errText = await resp.text().catch(() => '');
+      if (/terms/i.test(errText)) {
+        throw new Error(
+          'Groq Orpheus Voice requires one-time Terms Acceptance in your Groq Console for canopylabs/orpheus-v1-english, or select Gemini / ElevenLabs Voice.'
+        );
+      }
+      throw new Error(`Groq TTS failed (HTTP ${resp.status})${errText ? `: ${errText.slice(0, 140)}` : ''}`);
+    }
+
+    const arrayBuf = await resp.arrayBuffer();
+    const audioBase64 = Buffer.from(arrayBuf).toString('base64');
+    loggingDiagnostics.record(
+      'TextToSpeechEngine',
+      'INFO',
+      `Synthesized ${cleanText.length} chars via Groq ${modelId} (${voiceName})`
+    );
+    return {
+      audioBase64,
+      mimeType: 'audio/wav',
+      voiceUsed: voiceName,
+      modelUsed: modelId,
+      providerUsed: 'groq',
+    };
+  }
+
+  private async synthesizeElevenLabs(
+    cleanText: string,
+    personality: PersonalityId,
+    voice: VoiceSettings,
+    emotion: EmotionType = 'Normal'
   ): Promise<TtsSynthesisResult> {
     const key = process.env.ELEVENLABS_API_KEY;
     if (!key || key.startsWith('MY_')) {
@@ -52,77 +143,98 @@ class TextToSpeechEngine {
       );
     }
 
-    const defaultPersona =
-      personality === 'girl' ? 'Rachel' : personality === 'jadavis' ? 'Josh' : 'Adam';
+    const defaultPersona = personality === 'girl' || voice.gender === 'female' ? 'Bella' : 'Adam';
     const selectedName = voice.voiceName || defaultPersona;
     const voiceId =
       ELEVENLABS_VOICE_IDS[selectedName] ||
       (/^[A-Za-z0-9]{15,32}$/.test(selectedName) ? selectedName : ELEVENLABS_VOICE_IDS[defaultPersona]);
 
-    const modelId =
-      voice.voiceModel && voice.voiceModel.startsWith('eleven_')
-        ? voice.voiceModel
-        : 'eleven_flash_v2_5';
+    // Use eleven_multilingual_v2 for rich Hindi/Hinglish girlfriend emotions, or flash if low-latency needed
+    const hasDevanagariOrGirl =
+      /[\u0900-\u097F]/.test(cleanText) ||
+      personality === 'girl' ||
+      voice.voiceModel === 'eleven_multilingual_v2';
+    const candidateModels = hasDevanagariOrGirl
+      ? ['eleven_multilingual_v2', 'eleven_flash_v2_5']
+      : ['eleven_flash_v2_5', 'eleven_multilingual_v2'];
 
-    const resp = await fetch(
-      `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
-      {
-        method: 'POST',
-        headers: {
-          'xi-api-key': key,
-          'Content-Type': 'application/json',
-          Accept: 'audio/mpeg',
-        },
-        body: JSON.stringify({
-          text: cleanText,
-          model_id: modelId,
-          voice_settings: {
-            stability: Math.max(0.15, Math.min(1.0, voice.voiceStability ?? 0.65)),
-            similarity_boost: 0.78,
-            style: Math.max(0, Math.min(1.0, (voice.emotionIntensity ?? 0.7) * 0.65)),
-            use_speaker_boost: true,
+    const moodStabilityMap: Partial<Record<EmotionType, { stability: number; style: number }>> = {
+      Laughing: { stability: 0.20, style: 0.96 },
+      Angry: { stability: 0.26, style: 0.92 },
+      Sad: { stability: 0.26, style: 0.88 },
+      Romantic: { stability: 0.34, style: 0.84 },
+      Excited: { stability: 0.28, style: 0.90 },
+      Surprised: { stability: 0.30, style: 0.86 },
+      Happy: { stability: 0.36, style: 0.78 },
+      Curious: { stability: 0.42, style: 0.68 },
+      Serious: { stability: 0.56, style: 0.48 },
+      Calm: { stability: 0.54, style: 0.46 },
+      Normal: { stability: 0.42, style: 0.66 },
+    };
+    const tuned = moodStabilityMap[emotion] || { stability: 0.42, style: 0.66 };
+    const effectiveStability =
+      personality === 'girl' ? tuned.stability : Math.min(0.68, tuned.stability + 0.14);
+
+    let lastErr: Error | null = null;
+    for (const modelId of candidateModels) {
+      const resp = await fetch(
+        `https://api.elevenlabs.io/v1/text-to-speech/${encodeURIComponent(voiceId)}?output_format=mp3_44100_128`,
+        {
+          method: 'POST',
+          headers: {
+            'xi-api-key': key,
+            'Content-Type': 'application/json',
+            Accept: 'audio/mpeg',
           },
-        }),
-        signal: AbortSignal.timeout(15000),
-      }
-    );
+          body: JSON.stringify({
+            text: cleanText,
+            model_id: modelId,
+            voice_settings: {
+              stability: effectiveStability,
+              similarity_boost: 0.8,
+              style: tuned.style,
+              use_speaker_boost: true,
+            },
+          }),
+          signal: AbortSignal.timeout(15000),
+        }
+      );
 
-    if (!resp.ok) {
+      if (resp.ok) {
+        const arrayBuf = await resp.arrayBuffer();
+        const audioBase64 = Buffer.from(arrayBuf).toString('base64');
+        loggingDiagnostics.record(
+          'TextToSpeechEngine',
+          'INFO',
+          `Synthesized ${cleanText.length} chars via ElevenLabs ${modelId} (${selectedName})`
+        );
+        return {
+          audioBase64,
+          mimeType: 'audio/mpeg',
+          voiceUsed: selectedName,
+          modelUsed: modelId,
+          providerUsed: 'elevenlabs',
+        };
+      }
+
       const errBody = await resp.text().catch(() => '');
-      throw new Error(`ElevenLabs TTS failed (HTTP ${resp.status})${errBody ? `: ${errBody.slice(0, 120)}` : ''}`);
+      lastErr = new Error(
+        `ElevenLabs TTS failed (HTTP ${resp.status})${errBody ? `: ${errBody.slice(0, 140)}` : ''}`
+      );
+      if (resp.status === 401 || resp.status === 403) {
+        break;
+      }
     }
 
-    const arrayBuf = await resp.arrayBuffer();
-    const audioBase64 = Buffer.from(arrayBuf).toString('base64');
-    loggingDiagnostics.record(
-      'TextToSpeechEngine',
-      'INFO',
-      `Synthesized ${cleanText.length} chars via ElevenLabs ${modelId} (${selectedName})`
-    );
-    return {
-      audioBase64,
-      mimeType: 'audio/mpeg',
-      voiceUsed: selectedName,
-      modelUsed: modelId,
-      providerUsed: 'elevenlabs',
-    };
+    throw lastErr || new Error('ElevenLabs TTS failed.');
   }
 
-  async synthesize(
-    rawText: string,
+  private async synthesizeGemini(
+    cleanText: string,
     personality: PersonalityId,
     voice: VoiceSettings,
-    emotion: EmotionType = 'Normal'
+    emotion: EmotionType
   ): Promise<TtsSynthesisResult> {
-    const cleanText = AudioProcessingEngine.sanitizeTextForSpeech(rawText);
-    if (!cleanText) {
-      throw new Error('No speakable text provided.');
-    }
-
-    if (voice.ttsEngine === 'elevenlabs') {
-      return this.synthesizeElevenLabs(cleanText, personality, voice);
-    }
-
     const ai = createGeminiClient('v1beta');
     const style = emotionEngine.buildVoiceStyle(
       emotion,
@@ -130,56 +242,44 @@ class TextToSpeechEngine {
       voice.emotionIntensity ?? 0.8
     );
 
-    const expressiveEmotions: EmotionType[] = ['Happy', 'Sad', 'Angry', 'Laughing', 'Surprised', 'Excited'];
-    const useExpressiveModel =
-      voice.voiceModel === 'gemini-3.8-flash-tts' ||
-      (!voice.voiceModel &&
-        (personality === 'girl' ||
-          personality === 'jadavis' ||
-          expressiveEmotions.includes(emotion)));
-
     const primaryModel =
-      voice.voiceModel === 'gemini-3.8-flash-tts' || voice.voiceModel === 'gemini-3.8-flash-lite-tts'
-        ? voice.voiceModel
-        : useExpressiveModel
-          ? 'gemini-3.8-flash-tts'
-          : 'gemini-3.8-flash-lite-tts';
+      voice.voiceModel === 'gemini-3.8-flash-tts'
+        ? 'gemini-3.8-flash-tts'
+        : 'gemini-3.8-flash-lite-tts';
 
     const defaultGemini =
-      personality === 'girl'
-        ? voice.gender === 'male'
-          ? 'Puck'
-          : 'Kore'
-        : personality === 'jadavis'
-          ? 'Puck'
-          : personality === 'normal'
-            ? 'Fenrir'
-            : 'Charon';
+      personality === 'girl' || voice.gender === 'female' ? 'Kore' : 'Charon';
 
-    const voiceName = ELEVEN_TO_GEMINI_VOICE[voice.voiceName] || defaultGemini;
+    const voiceName = TO_GEMINI_VOICE[voice.voiceName] || defaultGemini;
 
     const trySynthesize = async (modelId: string, withMetadata: boolean) => {
       const part: Record<string, unknown> = { text: cleanText };
       if (withMetadata) {
         part.speechMetadata = { style };
       }
-      const response = await ai.models.generateContent({
-        model: modelId,
-        contents: [
-          {
-            role: 'user',
-            parts: [part as { text: string }],
-          },
-        ],
-        config: {
-          responseModalities: ['AUDIO'],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName },
+      const timeoutPromise = new Promise<never>((_, reject) =>
+        setTimeout(() => reject(new Error(`TTS timeout on ${modelId}`)), 7000)
+      );
+      const response = await Promise.race([
+        ai.models.generateContent({
+          model: modelId,
+          contents: [
+            {
+              role: 'user',
+              parts: [part as { text: string }],
+            },
+          ],
+          config: {
+            responseModalities: ['AUDIO'],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName },
+              },
             },
           },
-        },
-      });
+        }),
+        timeoutPromise,
+      ]);
       return response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
     };
 
@@ -220,6 +320,70 @@ class TextToSpeechEngine {
       modelUsed,
       providerUsed: 'gemini',
     };
+  }
+
+  async synthesize(
+    rawText: string,
+    personality: PersonalityId,
+    voice: VoiceSettings,
+    emotion: EmotionType = 'Normal'
+  ): Promise<TtsSynthesisResult> {
+    const cleanText = AudioProcessingEngine.sanitizeTextForSpeech(rawText);
+    if (!cleanText) {
+      throw new Error('No speakable text provided.');
+    }
+
+    const elevenEnabled = storageStore.getState().settings.elevenlabsEnabled !== false;
+    const hasEleven = Boolean(process.env.ELEVENLABS_API_KEY && elevenEnabled);
+    const hasGemini = Boolean(
+      process.env.GEMINI_API_KEY && !process.env.GEMINI_API_KEY.startsWith('MY_')
+    );
+    const hasGroq = Boolean(process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.startsWith('MY_'));
+
+    const orderedEngines: Array<'elevenlabs' | 'gemini' | 'groq'> = [];
+    const pushUnique = (eng: 'elevenlabs' | 'gemini' | 'groq') => {
+      if (!orderedEngines.includes(eng)) orderedEngines.push(eng);
+    };
+
+    if (voice.ttsEngine === 'elevenlabs' || voice.ttsEngine === 'gemini' || voice.ttsEngine === 'groq') {
+      pushUnique(voice.ttsEngine);
+    }
+    if (hasEleven) pushUnique('elevenlabs');
+    if (hasGemini) pushUnique('gemini');
+    if (hasGroq) pushUnique('groq');
+
+    let lastError: unknown;
+    for (const engine of orderedEngines) {
+      try {
+        if (engine === 'elevenlabs') {
+          if (!elevenEnabled && voice.ttsEngine === 'elevenlabs') {
+            throw new Error('ElevenLabs Voice is disconnected.');
+          }
+          if (!process.env.ELEVENLABS_API_KEY) continue;
+          return await this.synthesizeElevenLabs(cleanText, personality, voice, emotion);
+        }
+        if (engine === 'groq') {
+          if (!process.env.GROQ_API_KEY) continue;
+          return await this.synthesizeGroq(cleanText, personality, voice);
+        }
+        if (engine === 'gemini') {
+          if (!hasGemini) continue;
+          return await this.synthesizeGemini(cleanText, personality, voice, emotion);
+        }
+      } catch (err) {
+        lastError = err;
+        loggingDiagnostics.record(
+          'TextToSpeechEngine',
+          'WARN',
+          `Neural TTS fallback from ${engine}`,
+          err instanceof Error ? err.message : String(err)
+        );
+      }
+    }
+
+    throw lastError instanceof Error
+      ? lastError
+      : new Error('No Neural Voice engine is currently configured.');
   }
 }
 

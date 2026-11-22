@@ -25,14 +25,7 @@ class ConversationManager {
 
   create(personality: PersonalityId, initialTitle?: string): ConversationThread {
     const now = new Date().toISOString();
-    const defaultTitle =
-      personality === 'normal'
-        ? 'New Normal Session'
-        : personality === 'jadavis'
-          ? 'New JADAVIS Session'
-          : personality === 'girl'
-            ? 'New AI Girl Session'
-            : 'New JARVIS Session';
+    const defaultTitle = personality === 'girl' ? 'New AI Girl Session' : 'New JARVIS Session';
     const thread: ConversationThread = {
       id: crypto.randomUUID(),
       title: initialTitle?.trim() || defaultTitle,
@@ -57,8 +50,6 @@ class ConversationManager {
       if (
         message.role === 'user' &&
         (target.title === 'New JARVIS Session' ||
-          target.title === 'New Normal Session' ||
-          target.title === 'New JADAVIS Session' ||
           target.title === 'New AI Girl Session' ||
           target.title === 'New Companion Chat')
       ) {

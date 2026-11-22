@@ -15,7 +15,7 @@ android {
         versionCode = 1
         versionName = "1.0.0"
 
-        buildConfigField("String", "BACKEND_BASE_URL", "\"https://your-jarvis-backend.run.app\"")
+        buildConfigField("String", "BACKEND_BASE_URL", "\"https://ais-pre-yb53jwjapowiiegq66g3yf-298905448014.asia-east1.run.app\"")
     }
 
     signingConfigs {

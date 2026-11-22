@@ -52,6 +52,12 @@ class ErrorRecoveryEngine {
     const autoCandidates: Array<{ provider: ProviderId; model: string; speed: ThinkingSpeed; isFallback: boolean }> = [];
     if (isAuto) {
       if (preferReasoning) {
+        autoCandidates.push({
+          provider: 'gemini',
+          model: settings.reasoningModel || 'gemini-4-neon',
+          speed: 'MEDIUM',
+          isFallback: false,
+        });
         if (aiProviderManager.isProviderConfigured('groq')) {
           autoCandidates.push({
             provider: 'groq',
@@ -60,33 +66,29 @@ class ErrorRecoveryEngine {
             isFallback: false,
           });
         }
-        autoCandidates.push({
-          provider: 'gemini',
-          model: settings.reasoningModel || 'gemini-4-neon',
-          speed: 'MEDIUM',
-          isFallback: false,
-        });
-      }
-      if (aiProviderManager.isProviderConfigured('groq')) {
-        autoCandidates.push({
-          provider: 'groq',
-          model: aiProviderManager.getDefaultModelFor('groq') || 'openai/gpt-oss-20b',
-          speed: 'LOW',
-          isFallback: false,
-        });
-      }
-      if (aiProviderManager.isProviderConfigured('openrouter')) {
-        autoCandidates.push({
-          provider: 'openrouter',
-          model: aiProviderManager.getDefaultModelFor('openrouter'),
-          speed: 'LOW',
-          isFallback: true,
-        });
       }
       autoCandidates.push(
         { provider: 'gemini', model: settings.fastResponseModel || 'gemini-3.1-flash-lite', speed: 'LOW', isFallback: false },
-        { provider: 'gemini', model: 'gemini-3-flash-preview', speed: 'LOW', isFallback: true }
+        { provider: 'gemini', model: 'gemini-4-hydrogen', speed: 'LOW', isFallback: false }
       );
+      if (aiProviderManager.isProviderConfigured('groq')) {
+        autoCandidates.push(
+          { provider: 'groq', model: 'openai/gpt-oss-120b', speed: 'LOW', isFallback: false },
+          { provider: 'groq', model: 'qwen/qwen3.8-27b', speed: 'LOW', isFallback: false },
+          {
+            provider: 'groq',
+            model: aiProviderManager.getDefaultModelFor('groq') || 'openai/gpt-oss-20b',
+            speed: 'LOW',
+            isFallback: true,
+          }
+        );
+      }
+      autoCandidates.push({
+        provider: 'gemini',
+        model: 'gemini-3-flash-preview',
+        speed: 'LOW',
+        isFallback: true,
+      });
     }
 
     const raw: Array<{ provider: ProviderId; model: string; speed: ThinkingSpeed; isFallback: boolean }> = [
@@ -101,25 +103,24 @@ class ErrorRecoveryEngine {
         provider: settings.primaryProvider || 'gemini',
         model:
           aiProviderManager.getDefaultModelFor(settings.primaryProvider || 'gemini') ||
-          settings.fastResponseModel ||
           'gemini-3.1-flash-lite',
         speed: 'LOW',
         isFallback: true,
       },
       {
-        provider: settings.secondaryProvider || 'gemini',
+        provider: settings.secondaryProvider || 'groq',
         model:
-          aiProviderManager.getDefaultModelFor(settings.secondaryProvider || 'gemini') ||
-          settings.fastResponseModel ||
-          'gemini-3.1-flash-lite',
+          aiProviderManager.getDefaultModelFor(settings.secondaryProvider || 'groq') ||
+          'openai/gpt-oss-120b',
         speed: 'LOW',
         isFallback: true,
       },
+      { provider: 'groq', model: 'openai/gpt-oss-120b', speed: 'LOW', isFallback: true },
+      { provider: 'groq', model: 'qwen/qwen3.8-27b', speed: 'LOW', isFallback: true },
       { provider: 'groq', model: 'openai/gpt-oss-20b', speed: 'LOW', isFallback: true },
-      { provider: 'openrouter', model: aiProviderManager.getDefaultModelFor('openrouter'), speed: 'LOW', isFallback: true },
       { provider: 'gemini', model: 'gemini-3.1-flash-lite', speed: 'LOW', isFallback: true },
-      { provider: 'gemini', model: 'gemini-3-flash-preview', speed: 'LOW', isFallback: true },
       { provider: 'gemini', model: 'gemini-4-hydrogen', speed: 'LOW', isFallback: true },
+      { provider: 'gemini', model: 'gemini-3-flash-preview', speed: 'LOW', isFallback: true },
     ];
 
     const seen = new Set<string>();
@@ -159,7 +160,7 @@ class ErrorRecoveryEngine {
     );
 
     if (candidates.length === 0) {
-      throw new Error('No AI provider API key is configured on the server.');
+      throw new Error('No AI provider API key is configured. Please connect Gemini or Groq in Settings.');
     }
 
     let lastError: unknown;

@@ -1,4 +1,5 @@
-import 'dotenv/config';
+import dotenv from 'dotenv';
+dotenv.config({ override: true });
 import crypto from 'crypto';
 import fs from 'fs';
 import path from 'path';
@@ -18,6 +19,7 @@ import type {
 } from './src/types/jarvis.ts';
 import { aiProviderManager, formatFriendlyProviderError } from './server/modules/aiProviderManager.ts';
 import { accessibilityController } from './server/modules/accessibilityController.ts';
+import { AudioProcessingEngine } from './server/modules/audioProcessingEngine.ts';
 import { conversationManager } from './server/modules/conversationManager.ts';
 import {
   ContactManager,
@@ -26,7 +28,7 @@ import {
   PhoneIntelligenceManager,
   TaskExecutionEngine,
 } from './server/modules/deviceManagers.ts';
-import { emotionEngine } from './server/modules/emotionEngine.ts';
+import { emotionEngine, SUPPORTED_EMOTIONS } from './server/modules/emotionEngine.ts';
 import { errorRecoveryEngine } from './server/modules/errorRecoveryEngine.ts';
 import { intentDetectionEngine } from './server/modules/intentDetectionEngine.ts';
 import { loggingDiagnostics } from './server/modules/loggingDiagnostics.ts';
@@ -38,8 +40,14 @@ import { textToSpeechEngine } from './server/modules/textToSpeechEngine.ts';
 import { visionEngine } from './server/modules/visionEngine.ts';
 import { voiceRecognitionEngine } from './server/modules/voiceRecognitionEngine.ts';
 import { VoiceAppControlEngine } from './server/modules/voiceAppControl.ts';
+import { buildZipFromDirectory } from './server/modules/zipBuilder.ts';
 
 const PORT = Number(process.env.PORT || 3000);
+
+function matchEmotionName(rawTag: string): EmotionType | undefined {
+  const lower = rawTag.trim().toLowerCase();
+  return SUPPORTED_EMOTIONS.find((em) => em.toLowerCase() === lower);
+}
 
 function collectAndroidFiles(dir: string, baseDir: string): Array<{ path: string; content: string }> {
   if (!fs.existsSync(dir)) return [];
@@ -73,16 +81,24 @@ async function bootstrap() {
     const patch = req.body as Partial<AppSettingsPayload>;
     const updated = storageStore.update((draft) => {
       if (patch.activePersonality) draft.settings.activePersonality = patch.activePersonality;
+      if (patch.themeMode === 'black' || patch.themeMode === 'white') {
+        draft.settings.themeMode = patch.themeMode;
+      }
+      if (patch.floatingBubbleEnabled !== undefined) {
+        draft.settings.floatingBubbleEnabled = patch.floatingBubbleEnabled;
+      }
+      if (patch.background24x7 !== undefined) {
+        draft.settings.background24x7 = patch.background24x7;
+      }
+      if (patch.elevenlabsEnabled !== undefined) {
+        draft.settings.elevenlabsEnabled = patch.elevenlabsEnabled;
+      }
       if (patch.characterMoods) {
         draft.settings.characterMoods = { ...draft.settings.characterMoods, ...patch.characterMoods };
       }
       if (patch.jarvisModel) draft.settings.jarvisModel = { ...draft.settings.jarvisModel, ...patch.jarvisModel };
-      if (patch.normalModel) draft.settings.normalModel = { ...draft.settings.normalModel, ...patch.normalModel };
-      if (patch.jadavisModel) draft.settings.jadavisModel = { ...draft.settings.jadavisModel, ...patch.jadavisModel };
       if (patch.girlModel) draft.settings.girlModel = { ...draft.settings.girlModel, ...patch.girlModel };
       if (patch.jarvisVoice) draft.settings.jarvisVoice = { ...draft.settings.jarvisVoice, ...patch.jarvisVoice };
-      if (patch.normalVoice) draft.settings.normalVoice = { ...draft.settings.normalVoice, ...patch.normalVoice };
-      if (patch.jadavisVoice) draft.settings.jadavisVoice = { ...draft.settings.jadavisVoice, ...patch.jadavisVoice };
       if (patch.girlVoice) draft.settings.girlVoice = { ...draft.settings.girlVoice, ...patch.girlVoice };
       if (patch.automation) draft.settings.automation = { ...draft.settings.automation, ...patch.automation };
       if (patch.enabledProviders) {
@@ -112,8 +128,6 @@ async function bootstrap() {
       if (patch.proactiveIntervalSec !== undefined) draft.settings.proactiveIntervalSec = patch.proactiveIntervalSec;
       if (patch.playfulBanterEnabled !== undefined) draft.settings.playfulBanterEnabled = patch.playfulBanterEnabled;
       if (patch.selfLearningEnabled !== undefined) draft.settings.selfLearningEnabled = patch.selfLearningEnabled;
-      if (patch.customProviderBaseUrl !== undefined) draft.settings.customProviderBaseUrl = patch.customProviderBaseUrl;
-      if (patch.customProviderModel !== undefined) draft.settings.customProviderModel = patch.customProviderModel;
       if (patch.wakeWords !== undefined) draft.settings.wakeWords = patch.wakeWords;
       if (patch.wakeWordSensitivity !== undefined) draft.settings.wakeWordSensitivity = patch.wakeWordSensitivity;
       if (patch.sleepState !== undefined) draft.settings.sleepState = patch.sleepState;
@@ -129,7 +143,188 @@ async function bootstrap() {
   });
 
   app.get('/api/voice/engines', (_req, res) => {
-    res.json(aiProviderManager.getVoiceKeyStatuses());
+    const statuses = aiProviderManager.getVoiceKeyStatuses();
+    res.json({
+      ...statuses,
+      elevenlabsEnabled: storageStore.getState().settings.elevenlabsEnabled !== false,
+    });
+  });
+
+  app.post('/api/voice/elevenlabs/connect', async (_req, res) => {
+    storageStore.update((draft) => {
+      draft.settings.elevenlabsEnabled = true;
+      draft.settings.ttsProvider = 'elevenlabs';
+      for (const vc of [draft.settings.jarvisVoice, draft.settings.girlVoice]) {
+        vc.ttsEngine = 'elevenlabs';
+        vc.voiceModel = 'eleven_flash_v2_5';
+        vc.voiceName = vc.gender === 'female' ? 'Rachel' : 'Adam';
+      }
+    });
+    const key = process.env.ELEVENLABS_API_KEY;
+    const configured = Boolean(key && !key.startsWith('MY_'));
+    if (!configured) {
+      res.json({
+        configured: false,
+        enabled: true,
+        status: 'ENV_KEY_MISSING',
+        message: 'Set ELEVENLABS_API_KEY in AI Studio Secrets to activate ElevenLabs neural voices.',
+      });
+      return;
+    }
+    try {
+      const resp = await fetch('https://api.elevenlabs.io/v1/user', {
+        headers: { 'xi-api-key': key! },
+        signal: AbortSignal.timeout(6000),
+      });
+      res.json({
+        configured: true,
+        enabled: true,
+        status: resp.ok ? 'CONNECTED' : 'ERROR',
+        message: resp.ok ? 'ElevenLabs Voice connected & active.' : `ElevenLabs HTTP ${resp.status}`,
+      });
+    } catch (e) {
+      res.json({
+        configured: true,
+        enabled: true,
+        status: 'ERROR',
+        message: e instanceof Error ? e.message : 'ElevenLabs connection test failed.',
+      });
+    }
+  });
+
+  app.post('/api/voice/elevenlabs/disconnect', (_req, res) => {
+    storageStore.update((draft) => {
+      draft.settings.elevenlabsEnabled = false;
+      if (draft.settings.ttsProvider === 'elevenlabs') {
+        draft.settings.ttsProvider = 'gemini';
+      }
+      for (const vc of [draft.settings.jarvisVoice, draft.settings.girlVoice]) {
+        if (vc.ttsEngine === 'elevenlabs') {
+          vc.ttsEngine = 'gemini';
+          vc.voiceModel = 'gemini-3.8-flash-lite-tts';
+          vc.voiceName = vc.gender === 'female' ? 'Kore' : 'Charon';
+        }
+      }
+    });
+    res.json({ enabled: false, status: 'DISCONNECTED', message: 'ElevenLabs Voice disconnected.' });
+  });
+
+  app.post('/api/voice/elevenlabs/test', async (_req, res) => {
+    const start = Date.now();
+    const key = process.env.ELEVENLABS_API_KEY;
+    if (!key || key.startsWith('MY_')) {
+      res.json({
+        configured: false,
+        status: 'ENV_KEY_MISSING',
+        message: 'Add ELEVENLABS_API_KEY in AI Studio > Settings > Secrets.',
+      });
+      return;
+    }
+    try {
+      const resp = await fetch('https://api.elevenlabs.io/v1/user', {
+        headers: { 'xi-api-key': key },
+        signal: AbortSignal.timeout(7000),
+      });
+      res.json({
+        configured: true,
+        status: resp.ok ? 'CONNECTED' : 'ERROR',
+        latencyMs: Date.now() - start,
+        message: resp.ok ? 'ElevenLabs Voice Key verified!' : `ElevenLabs HTTP ${resp.status}`,
+      });
+    } catch (e) {
+      res.json({
+        configured: true,
+        status: 'ERROR',
+        latencyMs: Date.now() - start,
+        message: e instanceof Error ? e.message : 'ElevenLabs check failed.',
+      });
+    }
+  });
+
+  // Live Real-Time Weather Route (Open-Meteo, zero API key required)
+  app.get('/api/weather', async (req, res) => {
+    try {
+      let lat = Number(req.query.lat);
+      let lon = Number(req.query.lon);
+      let city = typeof req.query.city === 'string' && req.query.city.trim() ? req.query.city.trim() : '';
+
+      if (!Number.isFinite(lat) || !Number.isFinite(lon)) {
+        // Default to New Delhi coordinates if browser GPS not yet granted
+        lat = 28.6139;
+        lon = 77.209;
+        if (!city) city = 'New Delhi';
+      }
+
+      const weatherUrl =
+        `https://api.open-meteo.com/v1/forecast?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}` +
+        `&current=temperature_2m,relative_humidity_2m,apparent_temperature,is_day,weather_code,wind_speed_10m&timezone=auto`;
+
+      const weatherResp = await fetch(weatherUrl, { signal: AbortSignal.timeout(7000) });
+      if (!weatherResp.ok) {
+        throw new Error(`Weather API HTTP ${weatherResp.status}`);
+      }
+      const wData = (await weatherResp.json()) as {
+        current?: {
+          temperature_2m: number;
+          relative_humidity_2m: number;
+          apparent_temperature: number;
+          is_day: number;
+          weather_code: number;
+          wind_speed_10m: number;
+        };
+      };
+
+      if (!city) {
+        try {
+          const geoResp = await fetch(
+            `https://api.bigdatacloud.net/data/reverse-geocode-client?latitude=${encodeURIComponent(lat)}&longitude=${encodeURIComponent(lon)}&localityLanguage=en`,
+            { signal: AbortSignal.timeout(4000) }
+          );
+          if (geoResp.ok) {
+            const g = (await geoResp.json()) as { city?: string; locality?: string; principalSubdivision?: string };
+            city = g.city || g.locality || g.principalSubdivision || 'Current Location';
+          }
+        } catch {
+          city = 'Your Location';
+        }
+      }
+
+      const cur = wData.current;
+      const code = cur?.weather_code ?? 0;
+      const codeMap: Record<number, string> = {
+        0: 'Clear Sky',
+        1: 'Mainly Clear',
+        2: 'Partly Cloudy',
+        3: 'Overcast',
+        45: 'Foggy',
+        48: 'Mist',
+        51: 'Light Drizzle',
+        53: 'Moderate Drizzle',
+        61: 'Light Rain',
+        63: 'Rainy',
+        65: 'Heavy Rain',
+        71: 'Light Snow',
+        80: 'Rain Showers',
+        95: 'Thunderstorm',
+      };
+      const condition = codeMap[code] || (code >= 80 ? 'Showers' : code >= 50 ? 'Drizzle' : 'Clear');
+
+      res.json({
+        city: city || 'Live Weather',
+        temperatureC: Math.round(cur?.temperature_2m ?? 26),
+        feelsLikeC: Math.round(cur?.apparent_temperature ?? 26),
+        humidity: Math.round(cur?.relative_humidity_2m ?? 50),
+        windKmh: Math.round(cur?.wind_speed_10m ?? 8),
+        condition,
+        weatherCode: code,
+        isDay: cur?.is_day !== 0,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (e) {
+      res.status(502).json({
+        error: e instanceof Error ? e.message : 'Unable to fetch live weather',
+      });
+    }
   });
 
   app.post('/api/providers/:id/test', async (req, res) => {
@@ -361,15 +556,16 @@ async function bootstrap() {
     };
 
     try {
-      let thread = conversationId ? conversationManager.get(conversationId) : undefined;
-      if (!thread || thread.personality !== personality) {
-        thread = conversationManager.create(personality);
-      }
-
       const parsedCommand = await intentDetectionEngine.parse(message);
       const appControl = VoiceAppControlEngine.parseAndApply(message);
 
-      const effectivePersonality = appControl?.switchPersonality || personality;
+      const effectivePersonality: PersonalityId =
+        appControl?.switchPersonality || (personality === 'girl' ? 'girl' : 'jarvis');
+
+      let thread = conversationId ? conversationManager.get(conversationId) : undefined;
+      if (!thread || thread.personality !== effectivePersonality || appControl?.clearChat) {
+        thread = conversationManager.create(effectivePersonality);
+      }
 
       const userMsg: ChatMessage = {
         id: crypto.randomUUID(),
@@ -473,7 +669,7 @@ async function bootstrap() {
           role: 'assistant',
           content: replyText,
           timestamp: new Date().toISOString(),
-          personality,
+          personality: effectivePersonality,
           emotion: 'Calm',
           detectedLanguage: parsedCommand.detectedLanguage,
           latencyMs,
@@ -492,31 +688,43 @@ async function bootstrap() {
       }
 
       const settings = storageStore.getState().settings;
-      const modelConfig = modelSelectionManager.getConfig(personality);
-      const voiceConfig = modelSelectionManager.getVoiceConfig(personality);
-      const memoryContext = memoryManager.retrieveRelevant(personality, message);
+      const modelConfig = modelSelectionManager.getConfig(effectivePersonality);
+      const voiceConfig = modelSelectionManager.getVoiceConfig(effectivePersonality);
+      const memoryContext = memoryManager.retrieveRelevant(effectivePersonality, message);
 
       const currentEmotion =
-        moodOverride ||
-        emotionEngine.detectFromContext(
+        appControl?.setMood ||
+        emotionEngine.detectUserMood(
           message,
-          '',
-          personality,
-          settings.characterMoods[personality] || 'Normal'
+          effectivePersonality,
+          moodOverride || settings.characterMoods[effectivePersonality] || 'Normal'
         );
 
       const emotionDirective = emotionEngine.buildPromptDirective(
         currentEmotion,
-        voiceConfig.emotionIntensity ?? 0.8
+        voiceConfig.emotionIntensity ?? 0.85,
+        effectivePersonality
       );
 
       const evolutionDirective = selfEvolutionEngine.buildEvolutionDirective(
-        personality,
+        effectivePersonality,
         settings.playfulBanterEnabled !== false
       );
 
+      const liveTimeStr = new Date().toLocaleString('en-IN', {
+        weekday: 'short',
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit',
+      });
+
       const systemPrompt =
         `${modelConfig.systemPrompt}\n${emotionDirective}${memoryContext}${evolutionDirective}` +
+        `\nNatural Voice Rule: Speak 100% like a real person in natural Hinglish, Hindi, or English. NEVER refer to yourself as an AI, bot, assistant, or Aria. Strictly ZERO emojis, ZERO emoticons, ZERO asterisks, ZERO markdown.` +
+        `\nCreator Rule: Only if directly introducing yourself or asked who created/made you, mention alsmar Boos (Mujhe alsmar Boos ne banaya hai).` +
+        `\nCurrent Local Date & Time: ${liveTimeStr}.` +
         (contextNotes.length > 0 ? `\n\nReal-Time Device & Task Context:\n${contextNotes.join('\n')}` : '');
 
       const historyMessages = thread.messages.slice(-14).map((m) => ({
@@ -527,6 +735,32 @@ async function bootstrap() {
       let providerUsed: ProviderId = modelConfig.provider;
       let modelUsed = modelConfig.model;
       let fullReply = '';
+      let prefixBuffer = '';
+      let prefixResolved = false;
+      let detectedTagEmotion: EmotionType | undefined;
+
+      const emitCleanText = (rawSegment: string) => {
+        const noMood = rawSegment.replace(/\[MOOD:[A-Za-z]+\]\s*/gi, '');
+        const cleanChunk = AudioProcessingEngine.stripEmojisAndMarkdown(noMood);
+        if (cleanChunk) {
+          fullReply += cleanChunk;
+          sendEvent('delta', { text: cleanChunk });
+        }
+      };
+
+      const resolvePrefix = (buf: string): string => {
+        const trimmedLeft = buf.replace(/^\s+/, '');
+        const moodMatch = trimmedLeft.match(/^\[MOOD:([A-Za-z]+)\]\s*/i);
+        if (moodMatch) {
+          const parsedMood = matchEmotionName(moodMatch[1]);
+          if (parsedMood) {
+            detectedTagEmotion = parsedMood;
+            sendEvent('emotion', { emotion: parsedMood });
+          }
+          return trimmedLeft.slice(moodMatch[0].length);
+        }
+        return buf;
+      };
 
       const stream = errorRecoveryEngine.executeWithFallback(
         {
@@ -548,22 +782,46 @@ async function bootstrap() {
       );
 
       for await (const chunk of stream) {
-        fullReply += chunk;
-        sendEvent('delta', { text: chunk });
+        if (!prefixResolved) {
+          prefixBuffer += chunk;
+          const trimmedLeft = prefixBuffer.replace(/^\s+/, '');
+          if (trimmedLeft.length > 0 && !trimmedLeft.startsWith('[')) {
+            prefixResolved = true;
+            emitCleanText(prefixBuffer);
+            prefixBuffer = '';
+          } else if (trimmedLeft.startsWith('[') && trimmedLeft.includes(']')) {
+            const remainder = resolvePrefix(prefixBuffer);
+            prefixResolved = true;
+            prefixBuffer = '';
+            if (remainder) emitCleanText(remainder);
+          } else if (prefixBuffer.length > 32) {
+            prefixResolved = true;
+            emitCleanText(prefixBuffer);
+            prefixBuffer = '';
+          }
+        } else {
+          emitCleanText(chunk);
+        }
+      }
+
+      if (!prefixResolved && prefixBuffer) {
+        const remainder = resolvePrefix(prefixBuffer);
+        if (remainder) emitCleanText(remainder);
       }
 
       const latencyMs = Date.now() - startTime;
       const finalEmotion =
-        moodOverride ||
+        appControl?.setMood ||
+        detectedTagEmotion ||
         emotionEngine.detectFromContext(
           message,
           fullReply,
-          personality,
-          settings.characterMoods[personality] || 'Normal'
+          effectivePersonality,
+          settings.characterMoods[effectivePersonality] || 'Normal'
         );
 
       storageStore.update((draft) => {
-        draft.settings.characterMoods[personality] = finalEmotion;
+        draft.settings.characterMoods[effectivePersonality] = finalEmotion;
         if (draft.settings.sleepState !== 'AWAKE') {
           draft.settings.sleepState = 'AWAKE';
         }
@@ -574,7 +832,7 @@ async function bootstrap() {
         role: 'assistant',
         content: fullReply.trim(),
         timestamp: new Date().toISOString(),
-        personality,
+        personality: effectivePersonality,
         emotion: finalEmotion,
         detectedLanguage: parsedCommand.detectedLanguage,
         providerUsed,
@@ -583,7 +841,7 @@ async function bootstrap() {
         commandPlan: parsedCommand.steps.length > 0 || parsedCommand.blockedReason ? parsedCommand : undefined,
       };
       conversationManager.appendMessage(thread.id, assistantMsg);
-      selfEvolutionEngine.processTurn(personality, message, fullReply);
+      selfEvolutionEngine.processTurn(effectivePersonality, message, fullReply);
 
       sendEvent('done', {
         threadId: thread.id,
@@ -608,6 +866,7 @@ async function bootstrap() {
         conversationId?: string;
         personality?: PersonalityId;
       };
+      const safePersonality: PersonalityId = personality === 'girl' ? 'girl' : 'jarvis';
       const settings = storageStore.getState().settings;
       if (settings.sleepState !== 'AWAKE' || settings.proactiveTalkEnabled === false) {
         res.json({ skipped: true });
@@ -615,23 +874,25 @@ async function bootstrap() {
       }
 
       let thread = conversationId ? conversationManager.get(conversationId) : undefined;
-      if (!thread || thread.personality !== personality) {
-        const list = conversationManager.list(personality);
-        thread = list[0] || conversationManager.create(personality);
+      if (!thread || thread.personality !== safePersonality) {
+        const list = conversationManager.list(safePersonality);
+        thread = list[0] || conversationManager.create(safePersonality);
       }
 
-      const modelConfig = modelSelectionManager.getConfig(personality);
-      const currentEmotion = settings.characterMoods[personality] || 'Happy';
+      const modelConfig = modelSelectionManager.getConfig(safePersonality);
+      const currentEmotion = settings.characterMoods[safePersonality] || 'Happy';
       const evolutionDirective = selfEvolutionEngine.buildEvolutionDirective(
-        personality,
+        safePersonality,
         settings.playfulBanterEnabled !== false
       );
       const intel = PhoneIntelligenceManager.summarize();
 
       const proactivePrompt =
-        `${modelConfig.systemPrompt}${evolutionDirective}\n` +
-        'Initiate a brief, natural, spontaneous conversation check-in (1-2 sentences max) in Hinglish or English. ' +
-        'Tease the user lightly, share a playful thought, ask what they are up to, or tease them about taking a break—stay warm, fun, and natural.';
+        safePersonality === 'girl'
+          ? `${modelConfig.systemPrompt}${evolutionDirective}\n` +
+            'Initiate a spontaneous, real-girlfriend check-in with your boyfriend ("baby" or "jaan") in 1-2 short natural Hinglish sentences! Ask logically where he went, why he is quiet, tease him playfully, or act slightly naraz/romantic. NEVER mention AI or Aria. Strictly NO emojis, NO emoticons, NO asterisks.'
+          : `${modelConfig.systemPrompt}${evolutionDirective}\n` +
+            'Initiate a brief, witty Tony-Stark Iron Man JARVIS check-in addressing Sir/Boss in 1-2 short natural sentences. NEVER say you are an AI. Strictly NO emojis, NO emoticons, NO asterisks.';
 
       const historyMessages = thread.messages.slice(-6).map((m) => ({
         role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
@@ -652,11 +913,13 @@ async function bootstrap() {
             {
               role: 'user',
               content:
-                `[System Auto-Check-In Trigger] Initiate a spontaneous, playful chat with the user right now. Device note: ${intel.batteryPercent}% battery, ${intel.unreadNotifications.length} notifications.`,
+                safePersonality === 'girl'
+                  ? `[System Auto-Check-In] Boyfriend thodi der se chup hai. Khud aakar apni girlfriend wali logical baat puchho (jaise aaj kahan the, itni der kyon laga rahe ho, khana khaya ya naraz/romantic mood mein puchho). Device: ${intel.batteryPercent}% battery.`
+                  : `[System Auto-Check-In] User is idle. Deliver a brief, witty Iron Man JARVIS status check-in. Device note: ${intel.batteryPercent}% battery, ${intel.unreadNotifications.length} notifications.`,
             },
           ],
           thinkingSpeed: 'LOW',
-          maxOutputTokens: 160,
+          maxOutputTokens: 600,
         },
         {
           provider: modelConfig.fallbackProvider,
@@ -669,13 +932,25 @@ async function bootstrap() {
       );
 
       for await (const chunk of stream) {
-        text += chunk;
+        text += AudioProcessingEngine.stripEmojisAndMarkdown(chunk);
       }
 
-      const cleanText = text.trim();
+      let proactiveEmotion: EmotionType = currentEmotion;
+      const moodMatch = text.trimStart().match(/^\[MOOD:([A-Za-z]+)\]\s*/i);
+      if (moodMatch) {
+        const parsed = matchEmotionName(moodMatch[1]);
+        if (parsed) proactiveEmotion = parsed;
+      }
+      const cleanText = text.replace(/\[MOOD:[A-Za-z]+\]\s*/gi, '').trim();
       if (!cleanText) {
         res.json({ skipped: true });
         return;
+      }
+
+      if (proactiveEmotion !== currentEmotion) {
+        storageStore.update((draft) => {
+          draft.settings.characterMoods[safePersonality] = proactiveEmotion;
+        });
       }
 
       const msg: ChatMessage = {
@@ -683,8 +958,8 @@ async function bootstrap() {
         role: 'assistant',
         content: cleanText,
         timestamp: new Date().toISOString(),
-        personality,
-        emotion: currentEmotion,
+        personality: safePersonality,
+        emotion: proactiveEmotion,
         providerUsed,
         modelUsed,
         latencyMs: Date.now() - startTime,
@@ -801,9 +1076,37 @@ async function bootstrap() {
     res.json({ root: 'android/', fileCount: files.length, files });
   });
 
+  app.get('/api/android-project/download', (_req, res) => {
+    const androidDir = path.resolve(process.cwd(), 'android');
+    const zipBuffer = buildZipFromDirectory(androidDir);
+    res.setHeader('Content-Type', 'application/zip');
+    res.setHeader('Content-Disposition', 'attachment; filename="jarvis-ai-android.zip"');
+    res.setHeader('Content-Length', String(zipBuffer.length));
+    res.send(zipBuffer);
+  });
+
   if (process.env.NODE_ENV !== 'production') {
     const vite = await createViteServer({
-      server: { middlewareMode: true },
+      server: {
+        middlewareMode: true,
+        hmr: false,
+        ws: false,
+        watch: null,
+      },
+      plugins: [
+        {
+          name: 'jarvis-disable-client-hmr-ws',
+          transform(code, id) {
+            if (id.includes('vite/dist/client/client.mjs')) {
+              return code.replace(
+                /transport\.connect\(createHMRHandler\(handleMessage\)\);?/g,
+                '/* HMR disabled: WebSocket skipped */'
+              );
+            }
+            return null;
+          },
+        },
+      ],
       appType: 'spa',
     });
     app.use(vite.middlewares);

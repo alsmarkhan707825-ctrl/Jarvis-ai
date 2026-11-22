@@ -61,6 +61,20 @@ function pickRecorderMimeType(): string | undefined {
   return candidates.find((m) => MediaRecorder.isTypeSupported(m));
 }
 
+function cleanSpeechText(raw: string): string {
+  return raw
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/`([^`]+)`/g, '$1')
+    .replace(/\*\*([^*]+)\*\*/g, '$1')
+    .replace(/\*([^*]+)\*/g, '$1')
+    .replace(/#+\s+/g, '')
+    .replace(/[\p{Extended_Pictographic}\p{Emoji_Presentation}\u200D\uFE0F\u2600-\u27BF]/gu, '')
+    .replace(/[:;][-~]?[)D(P]/g, '')
+    .replace(/[_~<>|•▪►◆★☆✓✔✕✖]/g, ' ')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
 function deduplicateTranscript(raw: string): string {
   const normalized = raw.replace(/\s+/g, ' ').trim();
   if (!normalized) return '';
@@ -84,27 +98,36 @@ function splitFirstSpeechSegment(
   if (!trimmedStart) return { segment: null, remainder: '' };
 
   // Strong sentence boundary: . ! ? । \n
-  const sentenceMatch = trimmedStart.match(/^([\s\S]{10,}?[.!?।\n]+)(?:\s+|$)/);
+  const sentenceMatch = trimmedStart.match(/^([\s\S]{8,}?[.!?।\n]+)(?:\s+|$)/);
   if (sentenceMatch) {
     const seg = sentenceMatch[1].trim();
     const rem = trimmedStart.slice(sentenceMatch[0].length);
     return { segment: seg, remainder: rem };
   }
 
-  // For first segment, start speaking even faster at natural comma/clause >= 45 chars
+  // Ultra-fast first audio start: split at natural clause >= 18 chars or word boundary >= 36 chars
   if (isFirstSegment) {
-    const clauseMatch = trimmedStart.match(/^([\s\S]{42,}?[,;:—–-]+)(?:\s+|$)/);
+    const clauseMatch = trimmedStart.match(/^([\s\S]{18,}?[,;:—–-]+)(?:\s+|$)/);
     if (clauseMatch) {
       const seg = clauseMatch[1].trim();
       const rem = trimmedStart.slice(clauseMatch[0].length);
       return { segment: seg, remainder: rem };
     }
+    if (trimmedStart.length >= 42) {
+      const cutIdx = trimmedStart.lastIndexOf(' ', 40);
+      if (cutIdx >= 18) {
+        return {
+          segment: trimmedStart.slice(0, cutIdx).trim(),
+          remainder: trimmedStart.slice(cutIdx).trimStart(),
+        };
+      }
+    }
   }
 
   // Hard chunk cap to keep TTS fast if model writes a very long run-on sentence
-  if (trimmedStart.length > 160) {
-    const cutIdx = trimmedStart.lastIndexOf(' ', 150);
-    const splitAt = cutIdx > 60 ? cutIdx : 150;
+  if (trimmedStart.length > 140) {
+    const cutIdx = trimmedStart.lastIndexOf(' ', 130);
+    const splitAt = cutIdx > 48 ? cutIdx : 130;
     return {
       segment: trimmedStart.slice(0, splitAt).trim(),
       remainder: trimmedStart.slice(splitAt).trimStart(),
@@ -122,8 +145,10 @@ class VoiceClient {
   private audioChunks: Blob[] = [];
   private livePreviewRec: SpeechRecognitionLike | null = null;
   private latestPartialTranscript = '';
+  private hasFinalPreview = false;
 
   private activeAudioEl: HTMLAudioElement | null = null;
+  private sharedAudioEl: HTMLAudioElement | null = null;
   private activeObjectUrl: string | null = null;
   private speechTimerId: number | null = null;
   private isListening = false;
@@ -159,7 +184,23 @@ class VoiceClient {
       src.connect(ctx.destination);
       src.start(0);
     } catch {
-      // ignore if browser blocks priming
+      // ignore if browser blocks AudioContext priming
+    }
+
+    // Also unlock a persistent HTMLAudioElement synchronously on user gesture for Android Chrome
+    try {
+      if (!this.sharedAudioEl) {
+        this.sharedAudioEl = new Audio();
+      }
+      if (!this.isSpeaking) {
+        // 1-sample silent WAV to unlock element autoplay policy
+        this.sharedAudioEl.src =
+          'data:audio/wav;base64,UklGRigAAABXQVZFZm10IBIAAAABAAEARKwAAIhYAQACABAAAABkYXRhAgAAAAEA';
+        this.sharedAudioEl.volume = 0.01;
+        void this.sharedAudioEl.play().catch(() => {});
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -303,6 +344,7 @@ class VoiceClient {
     this.speechDetected = false;
     this.audioChunks = [];
     this.latestPartialTranscript = '';
+    this.hasFinalPreview = false;
 
     // Start non-blocking live SpeechRecognition preview for immediate word streaming
     const win = window as unknown as {
@@ -329,6 +371,7 @@ class VoiceClient {
             const piece = (res?.[0]?.transcript || '').trim();
             if (!piece) continue;
             if (res.isFinal) {
+              this.hasFinalPreview = true;
               const lastFinal = finalizedParts[finalizedParts.length - 1];
               if (!lastFinal || lastFinal.toLowerCase() !== piece.toLowerCase()) {
                 finalizedParts.push(piece);
@@ -409,8 +452,11 @@ class VoiceClient {
           return;
         }
 
-        // If auto or on-device STT and live SpeechRecognition already captured clean words, return immediately (<30ms)
-        if ((sttProvider === 'browser' || sttProvider === 'auto') && previewCaptured.length >= 2) {
+        // Use instant on-device transcript when finalized cleanly or when browser STT mode is locked
+        if (
+          (sttProvider === 'browser' && previewCaptured.length >= 2) ||
+          (sttProvider === 'auto' && this.hasFinalPreview && previewCaptured.length >= 3)
+        ) {
           callbacks.onFinalText(deduplicateTranscript(previewCaptured));
           return;
         }
@@ -671,6 +717,12 @@ class VoiceClient {
     this.streamParams = { personality, voice, emotion, callbacks };
   }
 
+  setStreamEmotion(emotion: EmotionType): void {
+    if (this.streamParams) {
+      this.streamParams.emotion = emotion;
+    }
+  }
+
   pushStreamDelta(deltaText: string): void {
     if (!this.streamParams || !deltaText) return;
     this.streamDeltaBuffer += deltaText;
@@ -715,8 +767,10 @@ class VoiceClient {
 
   private enqueueSegment(rawSegment: string): void {
     if (!this.streamParams) return;
-    const cleanKey = rawSegment.trim().toLowerCase();
-    if (!cleanKey || this.spokenSegmentsDedupe.has(cleanKey)) return;
+    const speakable = cleanSpeechText(rawSegment);
+    if (!speakable) return;
+    const cleanKey = speakable.toLowerCase();
+    if (this.spokenSegmentsDedupe.has(cleanKey)) return;
     this.spokenSegmentsDedupe.add(cleanKey);
 
     const sessionId = this.streamSessionId;
@@ -725,7 +779,7 @@ class VoiceClient {
     const { personality, voice, emotion } = this.streamParams;
 
     const promise = this.synthesizeChunk(
-      rawSegment,
+      speakable,
       personality,
       voice,
       emotion,
@@ -735,7 +789,7 @@ class VoiceClient {
 
     this.streamQueue.push({
       index,
-      text: rawSegment,
+      text: speakable,
       abortController,
       promise,
     });
@@ -837,19 +891,35 @@ class VoiceClient {
       }
 
       if (resolved.error) {
-        // Voice Lock enforcement: notify user of explicit error instead of silent robotic fallback
+        if (this.streamParams?.voice.manualFallbackToBrowserTts && this.streamParams) {
+          await this.playBrowserUtterance(
+            nextItem.text,
+            this.streamParams.voice,
+            this.streamParams.callbacks.onAmplitude,
+            sessionId
+          );
+          continue;
+        }
         this.streamParams?.callbacks.onError?.(resolved.error);
         this.interruptSpeech();
         return;
       }
 
       if (resolved.audioUrl && this.streamParams) {
-        await this.playAudioUrl(
+        const played = await this.playAudioUrl(
           resolved.audioUrl,
           this.streamParams.voice,
           this.streamParams.callbacks.onAmplitude,
           sessionId
         );
+        if (!played && sessionId === this.streamSessionId && this.isSpeaking && this.streamParams) {
+          await this.playBrowserUtterance(
+            nextItem.text,
+            this.streamParams.voice,
+            this.streamParams.callbacks.onAmplitude,
+            sessionId
+          );
+        }
       } else if (resolved.text && this.streamParams) {
         await this.playBrowserUtterance(
           resolved.text,
@@ -875,15 +945,18 @@ class VoiceClient {
     voice: VoiceSettings,
     onAmplitude: (level: number) => void,
     sessionId: number
-  ): Promise<void> {
+  ): Promise<boolean> {
     return new Promise((resolve) => {
       if (sessionId !== this.streamSessionId || !this.isSpeaking) {
         URL.revokeObjectURL(url);
-        resolve();
+        resolve(true);
         return;
       }
 
-      const audioEl = new Audio(url);
+      const audioEl = this.sharedAudioEl || new Audio();
+      this.sharedAudioEl = audioEl;
+      audioEl.pause();
+      audioEl.src = url;
       audioEl.volume = Math.max(0, Math.min(1, voice.volume ?? 1));
       audioEl.playbackRate = Math.max(0.75, Math.min(1.4, voice.speed || 1));
 
@@ -901,7 +974,10 @@ class VoiceClient {
         this.speechTimerId = requestAnimationFrame(tick);
       };
 
-      const cleanup = () => {
+      const cleanup = (didPlay: boolean) => {
+        audioEl.onplay = null;
+        audioEl.onended = null;
+        audioEl.onerror = null;
         if (this.speechTimerId !== null) {
           cancelAnimationFrame(this.speechTimerId);
           this.speechTimerId = null;
@@ -913,17 +989,17 @@ class VoiceClient {
         if (this.activeAudioEl === audioEl) {
           this.activeAudioEl = null;
         }
-        resolve();
+        resolve(didPlay);
       };
 
       audioEl.onplay = () => {
         this.speechTimerId = requestAnimationFrame(tick);
       };
-      audioEl.onended = cleanup;
-      audioEl.onerror = cleanup;
+      audioEl.onended = () => cleanup(true);
+      audioEl.onerror = () => cleanup(false);
 
       void audioEl.play().catch(() => {
-        cleanup();
+        cleanup(false);
       });
     });
   }
@@ -939,10 +1015,7 @@ class VoiceClient {
         resolve();
         return;
       }
-      const cleanText = text
-        .replace(/[*_`#>~]/g, ' ')
-        .replace(/\s+/g, ' ')
-        .trim();
+      const cleanText = cleanSpeechText(text);
       if (!cleanText) {
         resolve();
         return;

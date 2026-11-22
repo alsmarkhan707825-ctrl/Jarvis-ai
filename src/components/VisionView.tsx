@@ -176,23 +176,23 @@ export const VisionView: React.FC<VisionViewProps> = ({
   }, [subTab, screenConsent]);
 
   return (
-    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-24 pt-3">
+    <div className="w-full max-w-4xl mx-auto px-4 sm:px-6 pb-28 pt-4">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 mb-6">
         <div>
-          <h1 className="font-display text-2xl font-semibold text-white tracking-tight">
+          <h1 className="font-display text-2xl font-bold text-slate-900 dark:text-white tracking-tight">
             Vision & Scan
           </h1>
-          <p className="text-sm text-slate-400 mt-1">
+          <p className="text-sm text-slate-600 dark:text-slate-400 mt-1">
             Explicitly activated camera recognition, OCR text reading, visual Q&A, and screen UI inspection.
           </p>
         </div>
 
-        <div className="inline-flex p-1 rounded-xl bg-[#09132d] border border-blue-900/60 self-start">
+        <div className="inline-flex p-1 rounded-2xl bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-800 shadow-sm self-start">
           <button
             type="button"
             onClick={() => setSubTab('camera')}
-            className={`inline-flex items-center gap-1.5 min-h-[40px] px-4 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              subTab === 'camera' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+            className={`inline-flex items-center gap-1.5 min-h-[40px] px-4 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+              subTab === 'camera' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Camera className="w-3.5 h-3.5" />
@@ -201,8 +201,8 @@ export const VisionView: React.FC<VisionViewProps> = ({
           <button
             type="button"
             onClick={() => setSubTab('screen')}
-            className={`inline-flex items-center gap-1.5 min-h-[40px] px-4 py-1.5 rounded-lg text-xs font-medium transition-colors whitespace-nowrap ${
-              subTab === 'screen' ? 'bg-blue-600 text-white' : 'text-slate-400 hover:text-white'
+            className={`inline-flex items-center gap-1.5 min-h-[40px] px-4 py-1.5 rounded-xl text-xs font-semibold transition-all whitespace-nowrap ${
+              subTab === 'screen' ? 'bg-blue-600 text-white shadow-sm' : 'text-slate-600 dark:text-slate-400 hover:text-slate-900 dark:hover:text-white'
             }`}
           >
             <Monitor className="w-3.5 h-3.5" />
@@ -213,15 +213,14 @@ export const VisionView: React.FC<VisionViewProps> = ({
 
       {subTab === 'camera' ? (
         <div className="space-y-5">
-          {/* Camera Viewport & Explicit Controls */}
-          <div className="rounded-2xl bg-[#09132d]/80 border border-blue-900/50 overflow-hidden">
-            <div className="px-4 py-3 border-b border-blue-900/40 flex flex-wrap items-center justify-between gap-3">
+          <div className="rounded-2xl jarvis-surface overflow-hidden">
+            <div className="px-4 py-3 border-b border-slate-200 dark:border-slate-800 flex flex-wrap items-center justify-between gap-3 bg-slate-50/70 dark:bg-slate-900/60">
               <div className="flex items-center gap-2 text-xs">
-                <span className={cameraActive ? 'text-amber-300 font-semibold' : 'text-slate-400'}>
+                <span className={cameraActive ? 'text-blue-600 dark:text-cyan-400 font-semibold' : 'text-slate-600 dark:text-slate-300 font-medium'}>
                   {cameraActive ? 'Camera Active' : 'Camera Standby'}
                 </span>
-                <span aria-hidden="true" className="text-slate-600">·</span>
-                <span className="text-slate-400">
+                <span aria-hidden="true" className="text-slate-300 dark:text-slate-700">·</span>
+                <span className="text-slate-500 dark:text-slate-400">
                   {facingMode === 'environment' ? 'Rear Lens' : 'Front Lens'}
                 </span>
               </div>
@@ -231,7 +230,7 @@ export const VisionView: React.FC<VisionViewProps> = ({
                   <button
                     type="button"
                     onClick={() => void startCamera(facingMode)}
-                    className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-500 text-xs font-medium text-white whitespace-nowrap"
+                    className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 text-xs font-semibold text-white shadow-sm whitespace-nowrap"
                   >
                     <Camera className="w-3.5 h-3.5" />
                     Activate Camera
@@ -245,7 +244,7 @@ export const VisionView: React.FC<VisionViewProps> = ({
                         setFacingMode(next);
                         void startCamera(next);
                       }}
-                      className="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-xl bg-[#040918] hover:bg-blue-950/70 border border-blue-800/60 text-xs font-medium text-slate-200 whitespace-nowrap"
+                      className="inline-flex items-center gap-1.5 min-h-[38px] px-3 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 whitespace-nowrap"
                     >
                       <SwitchCamera className="w-3.5 h-3.5" />
                       Flip Lens
@@ -253,7 +252,7 @@ export const VisionView: React.FC<VisionViewProps> = ({
                     <button
                       type="button"
                       onClick={stopCamera}
-                      className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-red-950/60 hover:bg-red-900/60 border border-red-500/35 text-xs font-medium text-red-200 whitespace-nowrap"
+                      className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-red-50 hover:bg-red-100 border border-red-200 text-xs font-semibold text-red-700 whitespace-nowrap"
                     >
                       <CameraOff className="w-3.5 h-3.5" />
                       Stop Camera
@@ -261,15 +260,15 @@ export const VisionView: React.FC<VisionViewProps> = ({
                   </>
                 )}
 
-                <label className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-[#040918] hover:bg-blue-950/70 border border-blue-800/60 text-xs font-medium text-slate-200 cursor-pointer whitespace-nowrap">
-                  <Upload className="w-3.5 h-3.5" />
+                <label className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-white hover:bg-slate-50 border border-slate-200 text-xs font-medium text-slate-700 cursor-pointer whitespace-nowrap">
+                  <Upload className="w-3.5 h-3.5 text-blue-600" />
                   Upload Image
                   <input type="file" accept="image/*" onChange={handleFileUpload} className="hidden" />
                 </label>
               </div>
             </div>
 
-            <div className="relative bg-[#040918] aspect-video max-h-[340px] w-full flex items-center justify-center overflow-hidden">
+            <div className="relative bg-slate-100 dark:bg-slate-950 aspect-video max-h-[340px] w-full flex items-center justify-center overflow-hidden">
               <video
                 ref={videoRef}
                 playsInline
@@ -285,8 +284,8 @@ export const VisionView: React.FC<VisionViewProps> = ({
               )}
               {!cameraActive && !capturedPreview && (
                 <div className="text-center px-6">
-                  <ScanLine className="w-10 h-10 text-blue-400/70 mx-auto mb-2" />
-                  <p className="text-sm text-slate-300">
+                  <ScanLine className="w-10 h-10 text-blue-600/70 dark:text-cyan-400/70 mx-auto mb-2" />
+                  <p className="text-sm text-slate-600 dark:text-slate-400 font-medium">
                     Camera stays off until you tap Activate Camera or upload a photo.
                   </p>
                 </div>
@@ -294,19 +293,18 @@ export const VisionView: React.FC<VisionViewProps> = ({
             </div>
 
             {cameraError && (
-              <div className="px-4 py-2.5 bg-red-950/40 border-t border-red-500/30 text-xs text-red-300">
+              <div className="px-4 py-2.5 bg-red-50 dark:bg-red-950/40 border-t border-red-200 dark:border-red-800 text-xs text-red-700 dark:text-red-300">
                 {cameraError}
               </div>
             )}
 
-            {/* Action Buttons */}
-            <div className="p-4 space-y-3 border-t border-blue-900/40">
+            <div className="p-4 space-y-3 border-t border-slate-200 dark:border-slate-800 bg-white dark:bg-slate-900/50">
               <div className="flex flex-wrap gap-2">
                 <button
                   type="button"
                   disabled={analyzing}
                   onClick={() => void runVisionAnalysis('object')}
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-medium text-white whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-xs font-semibold text-white shadow-sm whitespace-nowrap"
                 >
                   <Eye className="w-3.5 h-3.5" />
                   Identify Object
@@ -315,18 +313,18 @@ export const VisionView: React.FC<VisionViewProps> = ({
                   type="button"
                   disabled={analyzing}
                   onClick={() => void runVisionAnalysis('ocr')}
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-[#040918] hover:bg-blue-950/70 border border-blue-800/60 disabled:opacity-50 text-xs font-medium text-slate-100 whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 disabled:opacity-50 text-xs font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap"
                 >
-                  <FileText className="w-3.5 h-3.5 text-amber-300" />
+                  <FileText className="w-3.5 h-3.5 text-amber-600 dark:text-amber-400" />
                   Read Text (OCR)
                 </button>
                 <button
                   type="button"
                   disabled={analyzing}
                   onClick={() => void runVisionAnalysis('scene')}
-                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-[#040918] hover:bg-blue-950/70 border border-blue-800/60 disabled:opacity-50 text-xs font-medium text-slate-100 whitespace-nowrap"
+                  className="inline-flex items-center gap-1.5 min-h-[40px] px-4 py-2 rounded-xl bg-slate-50 dark:bg-slate-800 hover:bg-slate-100 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 disabled:opacity-50 text-xs font-semibold text-slate-800 dark:text-slate-200 whitespace-nowrap"
                 >
-                  <ScanLine className="w-3.5 h-3.5 text-blue-400" />
+                  <ScanLine className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
                   Describe Scene
                 </button>
               </div>
@@ -343,12 +341,12 @@ export const VisionView: React.FC<VisionViewProps> = ({
                   value={qaPrompt}
                   onChange={(e) => setQaPrompt(e.target.value)}
                   placeholder="Ask a visual question (e.g. What brand is this or translate the sign)..."
-                  className="flex-1 h-11 px-3.5 rounded-xl bg-[#040918] border border-blue-900/60 text-sm text-white placeholder:text-slate-500 focus:outline-none focus:border-blue-500"
+                  className="flex-1 h-11 px-3.5 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-sm text-slate-900 dark:text-white placeholder:text-slate-400 focus:outline-none focus:border-blue-600"
                 />
                 <button
                   type="submit"
                   disabled={analyzing}
-                  className="min-h-[44px] px-4 rounded-xl bg-blue-600 hover:bg-blue-500 disabled:opacity-50 text-xs font-medium text-white inline-flex items-center gap-1.5 whitespace-nowrap"
+                  className="min-h-[44px] px-4 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-xs font-semibold text-white inline-flex items-center gap-1.5 whitespace-nowrap shadow-sm"
                 >
                   <Send className="w-3.5 h-3.5" />
                   {analyzing ? 'Scanning...' : 'Ask Vision'}
@@ -357,11 +355,10 @@ export const VisionView: React.FC<VisionViewProps> = ({
             </div>
           </div>
 
-          {/* Vision Analysis Result */}
           {visionResult && (
-            <div className="rounded-2xl bg-[#09132d]/80 border border-amber-400/30 p-5 space-y-3">
+            <div className="rounded-2xl jarvis-surface p-5 space-y-3 border-amber-300/70">
               <div className="flex items-center justify-between gap-2">
-                <div className="text-xs font-medium text-amber-300 uppercase tracking-wider">
+                <div className="text-xs font-semibold text-amber-700 uppercase tracking-wider tabular-nums">
                   {visionResult.mode} Analysis · {visionResult.latencyMs}ms
                 </div>
                 {activeVoice && (
@@ -378,22 +375,22 @@ export const VisionView: React.FC<VisionViewProps> = ({
                         () => {}
                       );
                     }}
-                    className="inline-flex items-center gap-1.5 text-xs text-blue-300 hover:text-amber-300"
+                    className="inline-flex items-center gap-1.5 text-xs font-semibold text-blue-600 hover:text-blue-700"
                   >
                     <Volume2 className="w-3.5 h-3.5" />
                     Speak Result
                   </button>
                 )}
               </div>
-              <p className="text-sm text-slate-100 leading-relaxed">{visionResult.summary}</p>
+              <p className="text-sm text-slate-800 dark:text-slate-100 leading-relaxed">{visionResult.summary}</p>
               {visionResult.detectedObjects.length > 0 && (
-                <div className="text-xs text-slate-300">
+                <div className="text-xs text-slate-600 dark:text-slate-400">
                   <span className="text-slate-400">Objects: </span>
                   {visionResult.detectedObjects.join(' · ')}
                 </div>
               )}
               {visionResult.extractedText && (
-                <div className="p-3 rounded-xl bg-[#040918] border border-blue-900/50 text-xs font-mono text-slate-200 whitespace-pre-wrap">
+                <div className="p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 text-xs font-mono text-slate-800 dark:text-slate-200 whitespace-pre-wrap">
                   {visionResult.extractedText}
                 </div>
               )}
@@ -401,37 +398,37 @@ export const VisionView: React.FC<VisionViewProps> = ({
           )}
         </div>
       ) : (
-        <div className="rounded-2xl bg-[#09132d]/80 border border-blue-900/50 p-5 space-y-4">
+        <div className="rounded-2xl jarvis-surface p-5 space-y-4">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
             <div>
-              <h2 className="text-base font-semibold text-white">Screen Context & UI Nodes</h2>
-              <p className="text-xs text-slate-400 mt-0.5">
+              <h2 className="text-base font-semibold text-slate-900 dark:text-white">Screen Context & UI Nodes</h2>
+              <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
                 Reads accessible UI elements only when Screen Vision consent is enabled.
               </p>
             </div>
-            <label className="inline-flex items-center gap-2.5 text-xs text-slate-200 cursor-pointer">
+            <label className="inline-flex items-center gap-2.5 text-xs font-medium text-slate-700 dark:text-slate-200 cursor-pointer">
               <input
                 type="checkbox"
                 checked={screenConsent}
                 onChange={(e) => setScreenConsent(e.target.checked)}
-                className="w-4 h-4 accent-blue-500"
+                className="w-4 h-4 accent-blue-600"
               />
               Allow Screen Inspection
             </label>
           </div>
 
           {!screenConsent ? (
-            <div className="p-6 rounded-xl bg-[#040918]/80 border border-blue-900/40 text-center text-xs text-slate-400">
+            <div className="p-6 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-800 text-center text-xs text-slate-500 dark:text-slate-400">
               Screen inspection is currently paused. Enable "Allow Screen Inspection" above to view active app nodes.
             </div>
           ) : (
             <div className="space-y-4">
               <div className="flex items-center justify-between">
-                <div className="text-xs text-slate-300">
+                <div className="text-xs text-slate-700">
                   {screenState ? (
                     <>
-                      <span className="text-amber-300 font-semibold">{screenState.currentApp}</span>
-                      <span className="text-slate-500"> · {screenState.packageName}</span>
+                      <span className="text-blue-600 font-semibold">{screenState.currentApp}</span>
+                      <span className="text-slate-400"> · {screenState.packageName}</span>
                     </>
                   ) : (
                     'Loading screen tree...'
@@ -440,7 +437,7 @@ export const VisionView: React.FC<VisionViewProps> = ({
                 <button
                   type="button"
                   onClick={() => void fetchScreenContext()}
-                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-xl bg-[#040918] border border-blue-800/60 text-xs text-slate-200"
+                  className="inline-flex items-center gap-1.5 min-h-[36px] px-3 rounded-xl bg-white border border-slate-200 text-xs font-medium text-slate-700 hover:bg-slate-50"
                 >
                   <RefreshCw className={`w-3.5 h-3.5 ${loadingScreen ? 'animate-spin' : ''}`} />
                   Refresh Screen
@@ -450,42 +447,42 @@ export const VisionView: React.FC<VisionViewProps> = ({
               {screenState && (
                 <>
                   <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 text-xs">
-                    <div className="p-3 rounded-xl bg-[#040918] border border-blue-900/50">
-                      <div className="text-slate-400">Brightness</div>
-                      <div className="text-white font-semibold mt-0.5 tabular-nums">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="text-slate-500">Brightness</div>
+                      <div className="text-slate-900 font-semibold mt-0.5 tabular-nums">
                         {screenState.brightnessPercent}%
                       </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[#040918] border border-blue-900/50">
-                      <div className="text-slate-400">Volume</div>
-                      <div className="text-white font-semibold mt-0.5 tabular-nums">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="text-slate-500">Volume</div>
+                      <div className="text-slate-900 font-semibold mt-0.5 tabular-nums">
                         {screenState.volumePercent}%
                       </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[#040918] border border-blue-900/50">
-                      <div className="text-slate-400">Battery</div>
-                      <div className="text-white font-semibold mt-0.5 tabular-nums">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="text-slate-500">Battery</div>
+                      <div className="text-slate-900 font-semibold mt-0.5 tabular-nums">
                         {screenState.batteryPercent}%
                       </div>
                     </div>
-                    <div className="p-3 rounded-xl bg-[#040918] border border-blue-900/50">
-                      <div className="text-slate-400">Network</div>
-                      <div className="text-white font-semibold mt-0.5 truncate">
+                    <div className="p-3 rounded-xl bg-slate-50 border border-slate-200">
+                      <div className="text-slate-500">Network</div>
+                      <div className="text-slate-900 font-semibold mt-0.5 truncate">
                         {screenState.networkStatus}
                       </div>
                     </div>
                   </div>
 
-                  <div className="divide-y divide-blue-900/40 rounded-xl bg-[#040918] border border-blue-900/50 overflow-hidden">
+                  <div className="divide-y divide-slate-200 rounded-xl bg-white border border-slate-200 overflow-hidden">
                     {screenState.nodes.map((node) => (
                       <div key={node.nodeId} className="p-3 flex items-center justify-between gap-3 text-xs">
                         <div className="min-w-0">
-                          <div className="text-white font-medium truncate">{node.label}</div>
+                          <div className="text-slate-900 font-medium truncate">{node.label}</div>
                           <div className="text-slate-500 font-mono text-[11px] truncate">
                             {node.type} · {node.nodeId}
                           </div>
                         </div>
-                        <span className="text-slate-400 shrink-0">
+                        <span className="text-slate-500 shrink-0">
                           {node.editable ? 'Editable' : node.clickable ? 'Clickable' : 'Readable'}
                         </span>
                       </div>

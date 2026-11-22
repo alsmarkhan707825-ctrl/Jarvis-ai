@@ -1,10 +1,10 @@
-export type PersonalityId = 'jarvis' | 'normal' | 'jadavis' | 'girl';
+export type PersonalityId = 'jarvis' | 'girl';
 
 export type SleepModeState = 'AWAKE' | 'SLEEPING' | 'SHUTDOWN';
 
 export type SttProviderId = 'auto' | 'browser' | 'gemini' | 'groq';
 
-export type TtsEngineId = 'gemini' | 'elevenlabs' | 'browser';
+export type TtsEngineId = 'gemini' | 'groq' | 'elevenlabs' | 'browser';
 
 export type EmotionType =
   | 'Normal'
@@ -12,6 +12,7 @@ export type EmotionType =
   | 'Sad'
   | 'Angry'
   | 'Laughing'
+  | 'Romantic'
   | 'Curious'
   | 'Surprised'
   | 'Excited'
@@ -20,18 +21,24 @@ export type EmotionType =
 
 export type OrbState = 'IDLE' | 'LISTENING' | 'THINKING' | 'SPEAKING' | 'ERROR' | 'TOUCH';
 
-export type ProviderId = 'gemini' | 'groq' | 'openrouter';
+export type ProviderId = 'gemini' | 'groq';
+
+export type ThemeMode = 'white' | 'black';
 
 export interface AppControlDirective {
   switchPersonality?: PersonalityId;
   setMood?: EmotionType;
+  themeMode?: ThemeMode;
   proactiveTalkEnabled?: boolean;
   playfulBanterEnabled?: boolean;
   autoModelSelection?: boolean;
   autoSpeakChatReplies?: boolean;
+  wakeWordEnabled?: boolean;
+  background24x7?: boolean;
+  floatingBubbleEnabled?: boolean;
   primaryProvider?: ProviderId;
   ttsEngine?: TtsEngineId;
-  navigateView?: 'home' | 'vision' | 'history' | 'settings';
+  navigateView?: 'home' | 'chat' | 'vision' | 'history' | 'settings';
   clearChat?: boolean;
   summaryNotes: string[];
 }
@@ -66,7 +73,7 @@ export interface ModelOption {
 }
 
 export interface ProviderInfo {
-  id: string;
+  id: ProviderId;
   name: string;
   envKeyName?: string;
   configured: boolean;
@@ -97,6 +104,12 @@ export type VoicePersonaName =
   | 'Puck'
   | 'Kore'
   | 'Zephyr'
+  | 'troy'
+  | 'daniel'
+  | 'austin'
+  | 'autumn'
+  | 'diana'
+  | 'hannah'
   | 'Adam'
   | 'Antoni'
   | 'Josh'
@@ -395,14 +408,14 @@ export interface AdaptiveTrait {
 
 export interface AppSettingsPayload {
   activePersonality: PersonalityId;
+  themeMode?: ThemeMode;
+  floatingBubbleEnabled?: boolean;
+  background24x7?: boolean;
+  elevenlabsEnabled?: boolean;
   characterMoods: Record<PersonalityId, EmotionType>;
   jarvisModel: PersonalityModelConfig;
-  normalModel: PersonalityModelConfig;
-  jadavisModel: PersonalityModelConfig;
   girlModel: PersonalityModelConfig;
   jarvisVoice: VoiceSettings;
-  normalVoice: VoiceSettings;
-  jadavisVoice: VoiceSettings;
   girlVoice: VoiceSettings;
   automation: AutomationSettings;
   enabledProviders: Record<ProviderId, boolean>;
@@ -420,8 +433,6 @@ export interface AppSettingsPayload {
   proactiveIntervalSec?: number;
   playfulBanterEnabled?: boolean;
   selfLearningEnabled?: boolean;
-  customProviderBaseUrl: string;
-  customProviderModel: string;
   wakeWords: string[];
   wakeWordSensitivity: number;
   sleepState: SleepModeState;
