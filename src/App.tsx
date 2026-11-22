@@ -4,6 +4,7 @@ import {
   BatteryCharging,
   Camera,
   CheckCircle2,
+  Download,
   History,
   Home,
   Layers,
@@ -1044,6 +1045,16 @@ export default function App() {
         </div>
 
         <div className="flex items-center gap-1.5">
+          <a
+            href="/api/android-apk/download"
+            download="jarvis-ai-debug.apk"
+            title="Download Installable Android Debug APK"
+            aria-label="Download Android APK"
+            className="min-h-[38px] px-2.5 flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors whitespace-nowrap shadow-sm"
+          >
+            <Download className="w-3.5 h-3.5" />
+            <span>APK</span>
+          </a>
           <PWAInstallButton compact />
 
           {/* Black / White Theme Switch */}
