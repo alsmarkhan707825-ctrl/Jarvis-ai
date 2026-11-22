@@ -1098,10 +1098,19 @@ async function bootstrap() {
           name: 'jarvis-disable-client-hmr-ws',
           transform(code, id) {
             if (id.includes('vite/dist/client/client.mjs')) {
-              return code.replace(
-                /transport\.connect\(createHMRHandler\(handleMessage\)\);?/g,
-                '/* HMR disabled: WebSocket skipped */'
-              );
+              return code
+                .replace(
+                  /transport\.connect\(createHMRHandler\(handleMessage\)\);?/g,
+                  '/* HMR disabled: WebSocket skipped */'
+                )
+                .replace(
+                  /throw new SendBeforeConnectError\("send was called before connect"\)/g,
+                  'return'
+                )
+                .replace(
+                  /throw new SendBeforeConnectError\("invoke was called before connect"\)/g,
+                  'return undefined'
+                );
             }
             return null;
           },

@@ -81,7 +81,7 @@ class JarvisAccessibilityService : AccessibilityService() {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
         val setOk = node.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args)
-        if (setOk && pressDone) {
+        if (setOk && pressDone && Build.VERSION.SDK_INT >= Build.VERSION_CODES.R) {
             node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
         }
         return setOk

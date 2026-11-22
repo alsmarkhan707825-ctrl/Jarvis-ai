@@ -19,6 +19,15 @@ android {
     }
 
     signingConfigs {
+        getByName("debug") {
+            val tempKeystore = rootProject.file("debug.keystore")
+            if (tempKeystore.exists()) {
+                storeFile = tempKeystore
+                storePassword = "android"
+                keyAlias = "androiddebugkey"
+                keyPassword = "android"
+            }
+        }
         create("release") {
             storeFile = file(System.getenv("JARVIS_KEYSTORE_PATH") ?: "release.keystore")
             storePassword = System.getenv("JARVIS_KEYSTORE_PASSWORD") ?: ""

@@ -15,7 +15,7 @@ class JarvisVoiceManager(
     private val onFinalResult: (String) -> Unit,
     private val onRmsChangedDb: (Float) -> Unit,
     private val onError: (String) -> Unit,
-    private val onNeuralTtsRequested: ((String, onFailure: (String) -> Unit) -> Unit)? = null
+    private val onNeuralTtsRequested: ((text: String, onFailure: (String) -> Unit) -> Unit)? = null
 ) : TextToSpeech.OnInitListener {
 
     private var recognizer: SpeechRecognizer? = null

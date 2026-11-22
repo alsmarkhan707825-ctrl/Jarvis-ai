@@ -1,4 +1,4 @@
-package com.jarvis.ai.service
+package com.jarvisai.assistant.service
 
 import android.app.Service
 import android.content.Intent
@@ -62,7 +62,6 @@ class OverlayBubbleService : Service() {
 
         val gestureDetector = GestureDetector(this, object : GestureDetector.SimpleOnGestureListener() {
             override fun onSingleTapConfirmed(e: MotionEvent): Boolean {
-                // Single-tap: Turn JARVIS off / standby
                 isJarvisActive = false
                 bubble.background = buildOrbDrawable(active = false)
                 sendBroadcast(Intent(ACTION_JARVIS_DEACTIVATE).setPackage(packageName))
@@ -70,7 +69,6 @@ class OverlayBubbleService : Service() {
             }
 
             override fun onDoubleTap(e: MotionEvent): Boolean {
-                // Double-tap: Activate JARVIS listening loop
                 isJarvisActive = true
                 bubble.background = buildOrbDrawable(active = true)
                 sendBroadcast(Intent(ACTION_JARVIS_ACTIVATE).setPackage(packageName))
@@ -126,7 +124,7 @@ class OverlayBubbleService : Service() {
     }
 
     companion object {
-        const val ACTION_JARVIS_ACTIVATE = "com.jarvis.ai.ACTION_ACTIVATE"
-        const val ACTION_JARVIS_DEACTIVATE = "com.jarvis.ai.ACTION_DEACTIVATE"
+        const val ACTION_JARVIS_ACTIVATE = "com.jarvisai.assistant.ACTION_ACTIVATE"
+        const val ACTION_JARVIS_DEACTIVATE = "com.jarvisai.assistant.ACTION_DEACTIVATE"
     }
 }
