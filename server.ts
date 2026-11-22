@@ -1177,13 +1177,47 @@ async function bootstrap() {
 
   app.get('/api/android-project', (_req, res) => {
     const androidDir = path.resolve(process.cwd(), 'android');
-    const files = collectAndroidFiles(androidDir, androidDir);
-    res.json({ root: 'android/', fileCount: files.length, files });
+    const files = collectAndroidFiles(androidDir, androidDir).filter(
+      (f) => !f.path.startsWith('.gradle/') && !f.path.startsWith('build/') && !f.path.startsWith('app/build/')
+    );
+    const apkPath = path.resolve(process.cwd(), 'APK_DOWNLOAD', 'app-debug.apk');
+    const apkSize = fs.existsSync(apkPath) ? fs.statSync(apkPath).size : 0;
+    res.json({
+      root: 'android/',
+      fileCount: files.length,
+      apkReady: apkSize > 1024 * 1024,
+      apkSizeBytes: apkSize,
+      files,
+    });
+  });
+
+  app.get('/api/android-apk/download', (_req, res) => {
+    const primaryApk = path.resolve(process.cwd(), 'APK_DOWNLOAD', 'app-debug.apk');
+    const backupApk = path.resolve(process.cwd(), '.build-outputs', 'app-debug.apk');
+    const target = fs.existsSync(primaryApk) ? primaryApk : fs.existsSync(backupApk) ? backupApk : null;
+    if (!target) {
+      res.status(404).json({ error: 'Debug APK not built yet.' });
+      return;
+    }
+    const stat = fs.statSync(target);
+    res.setHeader('Content-Type', 'application/vnd.android.package-archive');
+    res.setHeader('Content-Disposition', 'attachment; filename="jarvis-ai-debug.apk"');
+    res.setHeader('Content-Length', String(stat.size));
+    fs.createReadStream(target).pipe(res);
   });
 
   app.get('/api/android-project/download', (_req, res) => {
     const androidDir = path.resolve(process.cwd(), 'android');
-    const zipBuffer = buildZipFromDirectory(androidDir);
+    const apkDownloadPath = path.resolve(process.cwd(), 'APK_DOWNLOAD', 'app-debug.apk');
+    const buildOutputApkPath = path.resolve(process.cwd(), '.build-outputs', 'app-debug.apk');
+    const extraFiles: Array<{ relPath: string; filePath: string }> = [];
+    if (fs.existsSync(apkDownloadPath)) {
+      extraFiles.push({ relPath: 'APK_DOWNLOAD/app-debug.apk', filePath: apkDownloadPath });
+    }
+    if (fs.existsSync(buildOutputApkPath)) {
+      extraFiles.push({ relPath: '.build-outputs/app-debug.apk', filePath: buildOutputApkPath });
+    }
+    const zipBuffer = buildZipFromDirectory(androidDir, extraFiles);
     res.setHeader('Content-Type', 'application/zip');
     res.setHeader('Content-Disposition', 'attachment; filename="jarvis-ai-android.zip"');
     res.setHeader('Content-Length', String(zipBuffer.length));

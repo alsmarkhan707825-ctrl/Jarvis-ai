@@ -1,5 +1,6 @@
 package com.jarvisai.assistant.network
 
+import android.content.Context
 import android.util.Base64
 import com.jarvisai.assistant.BuildConfig
 import com.jarvisai.assistant.automation.AndroidCommandStep
@@ -14,27 +15,62 @@ import java.io.BufferedReader
 import java.io.InputStreamReader
 import java.util.concurrent.TimeUnit
 
-class JarvisBackendClient {
+data class WeatherSnapshot(
+    val city: String,
+    val temperatureC: Int,
+    val condition: String,
+    val humidity: Int
+)
+
+data class AppControlUpdate(
+    val switchPersonality: String? = null,
+    val setMood: String? = null,
+    val navigateView: String? = null,
+    val clearChat: Boolean = false
+)
+
+class JarvisBackendClient(private val context: Context? = null) {
     private val client = OkHttpClient.Builder()
         .connectTimeout(15, TimeUnit.SECONDS)
         .readTimeout(60, TimeUnit.SECONDS)
         .build()
 
+    fun getBaseUrl(): String {
+        val saved = context
+            ?.getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+            ?.getString("backend_url", "")
+            ?.trim()
+            ?.trimEnd('/')
+        return if (!saved.isNullOrBlank()) saved else BuildConfig.BACKEND_BASE_URL.trimEnd('/')
+    }
+
+    fun setCustomBaseUrl(url: String) {
+        val clean = url.trim().trimEnd('/')
+        context?.getSharedPreferences("jarvis_prefs", Context.MODE_PRIVATE)
+            ?.edit()
+            ?.putString("backend_url", clean)
+            ?.apply()
+    }
+
     suspend fun streamAssistant(
         personality: String,
         message: String,
-        onDelta: (String) -> Unit,
+        moodOverride: String? = null,
+        onDelta: (String, String?) -> Unit,
         onCommandSteps: (List<AndroidCommandStep>) -> Unit = {},
         onEmotion: (String) -> Unit = {},
+        onAppControl: (AppControlUpdate) -> Unit = {},
+        onSleepState: (String) -> Unit = {},
         onDone: (String) -> Unit,
         onError: (String) -> Unit
     ) = withContext(Dispatchers.IO) {
         val payload = JSONObject().apply {
             put("personality", personality)
             put("message", message)
+            if (!moodOverride.isNullOrBlank()) put("moodOverride", moodOverride)
         }
         val request = Request.Builder()
-            .url("${BuildConfig.BACKEND_BASE_URL}/api/assistant/stream")
+            .url("${getBaseUrl()}/api/assistant/stream")
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -58,12 +94,30 @@ class JarvisBackendClient {
                         when (currentEvent) {
                             "delta" -> {
                                 val chunk = data.optString("text", "")
+                                val emo = data.optString("emotion", "").ifBlank { null }
                                 fullText.append(chunk)
-                                onDelta(chunk)
+                                onDelta(chunk, emo)
                             }
                             "emotion" -> {
                                 val emo = data.optString("emotion", "")
                                 if (emo.isNotBlank()) onEmotion(emo)
+                            }
+                            "appControl" -> {
+                                val dir = data.optJSONObject("directive")
+                                if (dir != null) {
+                                    onAppControl(
+                                        AppControlUpdate(
+                                            switchPersonality = dir.optString("switchPersonality", "").ifBlank { null },
+                                            setMood = dir.optString("setMood", "").ifBlank { null },
+                                            navigateView = dir.optString("navigateView", "").ifBlank { null },
+                                            clearChat = dir.optBoolean("clearChat", false)
+                                        )
+                                    )
+                                }
+                            }
+                            "sleepState" -> {
+                                val s = data.optString("sleepState", "")
+                                if (s.isNotBlank()) onSleepState(s)
                             }
                             "command" -> {
                                 val plan = data.optJSONObject("commandPlan")
@@ -121,7 +175,7 @@ class JarvisBackendClient {
             put("emotion", emotion)
         }
         val request = Request.Builder()
-            .url("${BuildConfig.BACKEND_BASE_URL}/api/voice/tts")
+            .url("${getBaseUrl()}/api/voice/tts")
             .post(payload.toString().toRequestBody("application/json".toMediaType()))
             .build()
 
@@ -138,6 +192,51 @@ class JarvisBackendClient {
             }
         } catch (_: Exception) {
             null
+        }
+    }
+
+    suspend fun fetchWeather(): WeatherSnapshot? = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("${getBaseUrl()}/api/weather")
+            .get()
+            .build()
+        return@withContext try {
+            client.newCall(request).execute().use { resp ->
+                if (!resp.isSuccessful || resp.body == null) return@withContext null
+                val json = JSONObject(resp.body!!.string())
+                WeatherSnapshot(
+                    city = json.optString("city", "Weather"),
+                    temperatureC = json.optInt("temperatureC", 26),
+                    condition = json.optString("condition", "Clear"),
+                    humidity = json.optInt("humidity", 50)
+                )
+            }
+        } catch (_: Exception) {
+            null
+        }
+    }
+
+    suspend fun resetMemory(): Boolean = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("${getBaseUrl()}/api/system/reset-memory")
+            .post("{}".toRequestBody("application/json".toMediaType()))
+            .build()
+        return@withContext try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
+        }
+    }
+
+    suspend fun checkHealth(): Boolean = withContext(Dispatchers.IO) {
+        val request = Request.Builder()
+            .url("${getBaseUrl()}/api/health")
+            .get()
+            .build()
+        return@withContext try {
+            client.newCall(request).execute().use { it.isSuccessful }
+        } catch (_: Exception) {
+            false
         }
     }
 }

@@ -21,11 +21,16 @@ function crc32(buf: Buffer): number {
   return (c ^ -1) >>> 0;
 }
 
+const SKIP_DIRS = new Set(['.gradle', 'build', '.git', 'node_modules']);
+
 function collectFiles(dir: string, root: string): Array<{ relPath: string; data: Buffer }> {
   if (!fs.existsSync(dir)) return [];
   const entries = fs.readdirSync(dir, { withFileTypes: true });
   const results: Array<{ relPath: string; data: Buffer }> = [];
   for (const entry of entries) {
+    if (entry.isDirectory() && SKIP_DIRS.has(entry.name)) {
+      continue;
+    }
     const full = path.join(dir, entry.name);
     if (entry.isDirectory()) {
       results.push(...collectFiles(full, root));
@@ -37,8 +42,17 @@ function collectFiles(dir: string, root: string): Array<{ relPath: string; data:
   return results;
 }
 
-export function buildZipFromDirectory(dirPath: string): Buffer {
+export function buildZipFromDirectory(
+  dirPath: string,
+  extraFiles: Array<{ relPath: string; filePath: string }> = []
+): Buffer {
   const files = collectFiles(dirPath, dirPath);
+  for (const extra of extraFiles) {
+    if (fs.existsSync(extra.filePath)) {
+      files.push({ relPath: extra.relPath, data: fs.readFileSync(extra.filePath) });
+    }
+  }
+
   const localParts: Buffer[] = [];
   const centralParts: Buffer[] = [];
   let offset = 0;

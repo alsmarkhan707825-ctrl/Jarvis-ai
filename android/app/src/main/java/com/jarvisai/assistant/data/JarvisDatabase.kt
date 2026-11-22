@@ -23,7 +23,7 @@ data class ConversationRecord(
     val createdAt: Long
 )
 
-class JarvisDatabase(context: Context) : SQLiteOpenHelper(context, "jarvis_assistant.db", null, 1) {
+class JarvisDatabase(context: Context) : SQLiteOpenHelper(context, "jarvis_assistant.db", null, 2) {
 
     override fun onCreate(db: SQLiteDatabase) {
         db.execSQL(
@@ -107,6 +107,40 @@ class JarvisDatabase(context: Context) : SQLiteOpenHelper(context, "jarvis_assis
             put("emotion", msg.emotion)
             put("created_at", msg.createdAt)
         }
-        writableDatabase.insert("messages", null, values)
+        writableDatabase.insertWithOnConflict("messages", null, values, SQLiteDatabase.CONFLICT_REPLACE)
+    }
+
+    fun getMessagesForPersonality(personality: String, limit: Int = 60): List<ConversationRecord> {
+        val list = mutableListOf<ConversationRecord>()
+        val cursor = readableDatabase.query(
+            "messages",
+            null,
+            "personality = ?",
+            arrayOf(personality),
+            null,
+            null,
+            "created_at ASC",
+            limit.toString()
+        )
+        cursor.use {
+            while (it.moveToNext()) {
+                list.add(
+                    ConversationRecord(
+                        id = it.getString(it.getColumnIndexOrThrow("id")),
+                        personality = it.getString(it.getColumnIndexOrThrow("personality")),
+                        role = it.getString(it.getColumnIndexOrThrow("role")),
+                        content = it.getString(it.getColumnIndexOrThrow("content")),
+                        emotion = it.getString(it.getColumnIndexOrThrow("emotion")),
+                        createdAt = it.getLong(it.getColumnIndexOrThrow("created_at"))
+                    )
+                )
+            }
+        }
+        return list
+    }
+
+    fun clearAll() {
+        writableDatabase.delete("memories", null, null)
+        writableDatabase.delete("messages", null, null)
     }
 }

@@ -1502,6 +1502,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </div>
 
             <div className="flex flex-wrap items-center gap-2.5">
+              <a
+                href="/api/android-apk/download"
+                download="jarvis-ai-debug.apk"
+                className="inline-flex items-center justify-center gap-2 min-h-[42px] px-4 py-2 rounded-xl bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-semibold transition-colors whitespace-nowrap shadow-sm"
+              >
+                <Download className="w-4 h-4" />
+                Download Installable Debug APK (.apk)
+              </a>
               <PWAInstallButton />
               <a
                 href="/api/android-project/download"
@@ -1509,7 +1517,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 className="inline-flex items-center justify-center gap-2 min-h-[42px] px-4 py-2 rounded-xl bg-slate-900 dark:bg-slate-800 hover:bg-slate-800 dark:hover:bg-slate-700 border border-slate-700 text-white text-xs font-semibold transition-colors whitespace-nowrap shadow-sm"
               >
                 <Download className="w-4 h-4" />
-                Download Android Studio Project (.zip)
+                Download Complete Android Project + APK (.zip)
               </a>
             </div>
           </div>

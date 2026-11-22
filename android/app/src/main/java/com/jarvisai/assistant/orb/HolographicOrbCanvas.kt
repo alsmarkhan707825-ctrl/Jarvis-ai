@@ -22,6 +22,7 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.unit.dp
+import com.jarvisai.assistant.emotion.JarvisEmotion
 import kotlin.math.PI
 import kotlin.math.cos
 import kotlin.math.sin
@@ -32,6 +33,8 @@ enum class OrbState { IDLE, LISTENING, THINKING, SPEAKING, ERROR, TOUCH }
 fun HolographicOrbCanvas(
     state: OrbState,
     audioLevel: Float,
+    personality: String = "jarvis",
+    emotion: JarvisEmotion = JarvisEmotion.NORMAL,
     onTap: () -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -45,10 +48,10 @@ fun HolographicOrbCanvas(
         animationSpec = infiniteRepeatable(
             animation = tween(
                 durationMillis = when (state) {
-                    OrbState.THINKING -> 2400
-                    OrbState.SPEAKING -> 3800
-                    OrbState.LISTENING -> 4200
-                    else -> 8000
+                    OrbState.THINKING -> 2200
+                    OrbState.SPEAKING -> 3400
+                    OrbState.LISTENING -> 3900
+                    else -> 7500
                 },
                 easing = LinearEasing
             ),
@@ -57,12 +60,23 @@ fun HolographicOrbCanvas(
         label = "phase"
     )
 
-    val royalBlue = if (state == OrbState.ERROR) Color(0xFFEF4444) else Color(0xFF2563EB)
-    val goldAccent = if (state == OrbState.ERROR) Color(0xFFF59E0B) else Color(0xFFD4AF37)
+    val (primaryColor, accentColor, coreColor) = when {
+        state == OrbState.ERROR -> Triple(Color(0xFFEF4444), Color(0xFFF59E0B), Color(0xFF450A0A))
+        emotion == JarvisEmotion.ANGRY -> Triple(Color(0xFFDC2626), Color(0xFFFB923C), Color(0xFF450A0A))
+        emotion == JarvisEmotion.ROMANTIC -> Triple(Color(0xFFEC4899), Color(0xFFF43F5E), Color(0xFF500724))
+        emotion == JarvisEmotion.HAPPY || emotion == JarvisEmotion.LAUGHING ->
+            Triple(Color(0xFF10B981), Color(0xFFFACC15), Color(0xFF064E3B))
+        emotion == JarvisEmotion.SAD -> Triple(Color(0xFF3B82F6), Color(0xFF93C5FD), Color(0xFF172554))
+        emotion == JarvisEmotion.CURIOUS || emotion == JarvisEmotion.SURPRISED ->
+            Triple(Color(0xFF8B5CF6), Color(0xFF38BDF8), Color(0xFF2E1065))
+        emotion == JarvisEmotion.EXCITED -> Triple(Color(0xFFF59E0B), Color(0xFFEC4899), Color(0xFF451A03))
+        personality == "girl" -> Triple(Color(0xFFE11D48), Color(0xFFA855F7), Color(0xFF4C0519))
+        else -> Triple(Color(0xFF2563EB), Color(0xFFD4AF37), Color(0xFF0A1842))
+    }
 
     Canvas(
         modifier = modifier
-            .size(280.dp)
+            .size(230.dp)
             .pointerInput(Unit) {
                 detectTapGestures(
                     onPress = {
@@ -91,12 +105,12 @@ fun HolographicOrbCanvas(
             }
     ) {
         val center = Offset(size.width / 2f + touchOffset.x, size.height / 2f + touchOffset.y)
-        val baseR = size.minDimension * 0.30f
-        val dynamicR = baseR + (audioLevel.coerceIn(0f, 1f) * baseR * 0.22f) + if (isTouching) 10f else 0f
+        val baseR = size.minDimension * 0.31f
+        val dynamicR = baseR + (audioLevel.coerceIn(0f, 1f) * baseR * 0.24f) + if (isTouching) 10f else 0f
 
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(royalBlue.copy(alpha = 0.35f), Color.Transparent),
+                colors = listOf(primaryColor.copy(alpha = 0.42f), Color.Transparent),
                 center = center,
                 radius = dynamicR * 1.75f
             ),
@@ -105,15 +119,15 @@ fun HolographicOrbCanvas(
         )
 
         drawCircle(
-            color = goldAccent.copy(alpha = 0.65f),
+            color = accentColor.copy(alpha = 0.7f),
             radius = dynamicR * 1.24f,
             center = center,
-            style = Stroke(width = 2.5f)
+            style = Stroke(width = 2.8f)
         )
 
         drawCircle(
             brush = Brush.radialGradient(
-                colors = listOf(Color(0xFFFFF8E1), goldAccent, royalBlue, Color(0xFF0A1842)),
+                colors = listOf(Color(0xFFFFF8E1), accentColor, primaryColor, coreColor),
                 center = center - Offset(dynamicR * 0.2f, dynamicR * 0.2f),
                 radius = dynamicR
             ),
@@ -121,11 +135,11 @@ fun HolographicOrbCanvas(
             center = center
         )
 
-        val arcX = center.x + cos(phase.toDouble()).toFloat() * (dynamicR * 0.48f)
-        val arcY = center.y + sin(phase.toDouble()).toFloat() * (dynamicR * 0.48f)
+        val arcX = center.x + cos(phase.toDouble()).toFloat() * (dynamicR * 0.50f)
+        val arcY = center.y + sin(phase.toDouble()).toFloat() * (dynamicR * 0.50f)
         drawCircle(
-            color = goldAccent.copy(alpha = 0.85f),
-            radius = 5f,
+            color = accentColor.copy(alpha = 0.9f),
+            radius = 5.5f,
             center = Offset(arcX, arcY)
         )
     }

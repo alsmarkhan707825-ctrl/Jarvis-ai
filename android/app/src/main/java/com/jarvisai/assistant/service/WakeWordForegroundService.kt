@@ -31,7 +31,10 @@ class WakeWordForegroundService : Service() {
         "hey jarvis",
         "hello jarvis",
         "wake up jarvis",
-        "jarvis"
+        "jarvis",
+        "hey maya",
+        "hello maya",
+        "maya"
     )
     private var isPausedForTts = false
     private var isSleeping = false
@@ -51,17 +54,19 @@ class WakeWordForegroundService : Service() {
         if (intent?.hasExtra(EXTRA_SENSITIVITY) == true) {
             sensitivity = intent.getFloatExtra(EXTRA_SENSITIVITY, 0.72f).coerceIn(0.2f, 1.0f)
         }
+        val prefs = getSharedPreferences("jarvis_prefs", MODE_PRIVATE)
 
         when (intent?.action) {
             ACTION_ENTER_SLEEP -> {
                 isSleeping = true
                 isShutDown = false
                 isPausedForTts = false
-                startForeground(102, buildNotification("Sleep mode: listening for wake word"))
+                startForeground(102, buildNotification("Sleep mode: listening for Hey JARVIS / Maya"))
                 startWakeWordLoop()
                 return START_STICKY
             }
             ACTION_STOP_COMPLETELY -> {
+                prefs.edit().putBoolean("wake_word_24x7", false).apply()
                 isShutDown = true
                 isSleeping = false
                 recognizer?.stopListening()
@@ -77,18 +82,20 @@ class WakeWordForegroundService : Service() {
                 return START_STICKY
             }
             ACTION_RESUME_WAKEWORD -> {
+                prefs.edit().putBoolean("wake_word_24x7", true).apply()
                 isSleeping = false
                 isShutDown = false
                 isPausedForTts = false
-                startForeground(102, buildNotification("Wake-word listening active"))
+                startForeground(102, buildNotification("24/7 Wake-word active (Hey JARVIS / Maya)"))
                 startWakeWordLoop()
                 return START_STICKY
             }
             else -> {
+                prefs.edit().putBoolean("wake_word_24x7", true).apply()
                 isShutDown = false
                 startForeground(
                     102,
-                    buildNotification(if (isSleeping) "Sleep mode: listening for wake word" else "Wake-word listening active")
+                    buildNotification(if (isSleeping) "Sleep mode: listening for wake word" else "24/7 Wake-word active (Hey JARVIS / Maya)")
                 )
                 if (!isPausedForTts) {
                     startWakeWordLoop()

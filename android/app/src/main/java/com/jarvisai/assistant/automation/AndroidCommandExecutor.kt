@@ -8,7 +8,10 @@ import android.hardware.camera2.CameraCharacteristics
 import android.hardware.camera2.CameraManager
 import android.media.AudioManager
 import android.net.Uri
+import android.os.BatteryManager
 import android.os.Build
+import android.provider.AlarmClock
+import android.provider.CalendarContract
 import android.provider.ContactsContract
 import android.provider.Settings
 import android.view.KeyEvent
@@ -46,8 +49,16 @@ class AndroidCommandExecutor(private val context: Context) {
             "camera" to "com.android.camera",
             "calculator" to "com.google.android.calculator",
             "clock" to "com.google.android.deskclock",
+            "ghadi" to "com.google.android.deskclock",
+            "alarm" to "com.google.android.deskclock",
+            "calendar" to "com.google.android.calendar",
             "messages" to "com.google.android.apps.messaging",
-            "phone" to "com.google.android.dialer"
+            "sms" to "com.google.android.apps.messaging",
+            "phone" to "com.google.android.dialer",
+            "dialer" to "com.google.android.dialer",
+            "kamera" to "com.android.camera",
+            "seting" to "com.android.settings",
+            "gaana" to "com.spotify.music"
         )
     }
 
@@ -206,6 +217,40 @@ class AndroidCommandExecutor(private val context: Context) {
                 if (acc != null && (acc.clickNodeByText("Send") || acc.clickNodeByText("Done") || acc.clickNodeByText("Search"))) {
                     "Submitted"
                 } else "Submit action sent"
+            }
+            "set_alarm" -> {
+                val alarmIntent = Intent(AlarmClock.ACTION_SET_ALARM).apply {
+                    val minutesTotal = (step.numericValue ?: 0.0).toInt()
+                    if (minutesTotal > 0) {
+                        putExtra(AlarmClock.EXTRA_HOUR, (minutesTotal / 60) % 24)
+                        putExtra(AlarmClock.EXTRA_MINUTES, minutesTotal % 60)
+                    }
+                    putExtra(AlarmClock.EXTRA_MESSAGE, step.inputText.ifBlank { "JARVIS Alarm" })
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(alarmIntent)
+                    "Opened Alarm setup"
+                } catch (_: Exception) {
+                    "Alarm app unavailable"
+                }
+            }
+            "open_calendar" -> {
+                val calIntent = Intent(Intent.ACTION_VIEW).apply {
+                    data = CalendarContract.CONTENT_URI.buildUpon().appendPath("time").build()
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                try {
+                    context.startActivity(calIntent)
+                    "Opened Calendar"
+                } catch (_: Exception) {
+                    "Calendar unavailable"
+                }
+            }
+            "phone_intelligence", "battery_status" -> {
+                val bm = context.getSystemService(Context.BATTERY_SERVICE) as BatteryManager
+                val pct = bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY)
+                "Battery $pct%"
             }
             else -> ""
         }
