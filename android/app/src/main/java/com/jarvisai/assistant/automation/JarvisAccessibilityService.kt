@@ -19,7 +19,6 @@ class JarvisAccessibilityService : AccessibilityService() {
             private set
 
         private val PROTECTED_PACKAGES = setOf(
-            "com.android.systemui",
             "com.google.android.apps.walletnfcrel",
             "com.phonepe.app",
             "net.one97.paytm"
@@ -68,15 +67,59 @@ class JarvisAccessibilityService : AccessibilityService() {
                 parent = parent.parent
             }
         }
+        val fallbackNode = findNodeByContentOrText(root, text)
+        if (fallbackNode != null) {
+            if (fallbackNode.isClickable) {
+                return fallbackNode.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+            }
+            var p = fallbackNode.parent
+            while (p != null) {
+                if (p.isClickable) return p.performAction(AccessibilityNodeInfo.ACTION_CLICK)
+                p = p.parent
+            }
+        }
         return false
+    }
+
+    private fun findNodeByContentOrText(node: AccessibilityNodeInfo?, query: String): AccessibilityNodeInfo? {
+        if (node == null) return null
+        val txt = node.text?.toString().orEmpty()
+        val desc = node.contentDescription?.toString().orEmpty()
+        if (txt.contains(query, ignoreCase = true) || desc.contains(query, ignoreCase = true)) {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            val found = findNodeByContentOrText(node.getChild(i), query)
+            if (found != null) return found
+        }
+        return null
+    }
+
+    private fun findEditableNode(node: AccessibilityNodeInfo?, preferFocused: Boolean): AccessibilityNodeInfo? {
+        if (node == null) return null
+        if (node.isEditable && (!preferFocused || node.isFocused)) {
+            return node
+        }
+        for (i in 0 until node.childCount) {
+            val found = findEditableNode(node.getChild(i), preferFocused)
+            if (found != null) return found
+        }
+        return null
     }
 
     fun enterTextAndSubmit(hintOrId: String, text: String, pressDone: Boolean = true): Boolean {
         if (isProtectedContext()) return false
         val root = rootInActiveWindow ?: return false
-        val targets = root.findAccessibilityNodeInfosByViewId(hintOrId)
-            .ifEmpty { root.findAccessibilityNodeInfosByText(hintOrId) }
-        val node = targets.firstOrNull { it.isEditable } ?: return false
+        val targets = if (hintOrId.isNotBlank()) {
+            root.findAccessibilityNodeInfosByViewId(hintOrId)
+                .ifEmpty { root.findAccessibilityNodeInfosByText(hintOrId) }
+        } else {
+            emptyList()
+        }
+        val node = targets.firstOrNull { it.isEditable }
+            ?: findEditableNode(root, true)
+            ?: findEditableNode(root, false)
+            ?: return false
         val args = Bundle().apply {
             putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text)
         }
@@ -85,6 +128,10 @@ class JarvisAccessibilityService : AccessibilityService() {
             node.performAction(AccessibilityNodeInfo.AccessibilityAction.ACTION_IME_ENTER.id)
         }
         return setOk
+    }
+
+    fun enterTextFocused(text: String, pressDone: Boolean = true): Boolean {
+        return enterTextAndSubmit("", text, pressDone)
     }
 
     fun skipVisibleAd(): Boolean {
@@ -149,7 +196,16 @@ class JarvisAccessibilityService : AccessibilityService() {
 
     fun navigateBack(): Boolean = performGlobalAction(GLOBAL_ACTION_BACK)
     fun navigateHome(): Boolean = performGlobalAction(GLOBAL_ACTION_HOME)
+    fun openRecents(): Boolean = performGlobalAction(GLOBAL_ACTION_RECENTS)
     fun showNotifications(): Boolean = performGlobalAction(GLOBAL_ACTION_NOTIFICATIONS)
+
+    fun takeScreenshotAction(): Boolean {
+        return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {
+            performGlobalAction(GLOBAL_ACTION_TAKE_SCREENSHOT)
+        } else {
+            false
+        }
+    }
 
     fun lockDevice(): Boolean {
         return if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P) {

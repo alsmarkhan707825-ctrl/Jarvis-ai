@@ -1,3 +1,4 @@
+import { MsEdgeTTS, OUTPUT_FORMAT } from 'msedge-tts';
 import type { EmotionType, PersonalityId, VoiceSettings } from '../../src/types/jarvis.ts';
 import { createGeminiClient } from './aiProviderManager.ts';
 import { AudioProcessingEngine } from './audioProcessingEngine.ts';
@@ -10,7 +11,7 @@ export interface TtsSynthesisResult {
   mimeType: 'audio/wav' | 'audio/mpeg';
   voiceUsed: string;
   modelUsed: string;
-  providerUsed: 'gemini' | 'groq' | 'elevenlabs';
+  providerUsed: 'gemini' | 'groq' | 'elevenlabs' | 'edge';
 }
 
 const ELEVENLABS_VOICE_IDS: Record<string, string> = {
@@ -322,6 +323,80 @@ class TextToSpeechEngine {
     };
   }
 
+  private async synthesizeEdgeNeural(
+    cleanText: string,
+    personality: PersonalityId,
+    voice: VoiceSettings,
+    emotion: EmotionType
+  ): Promise<TtsSynthesisResult> {
+    const isFemale = personality === 'girl' || voice.gender === 'female';
+    const hasDevanagariOrHinglish =
+      /[\u0900-\u097F]/.test(cleanText) ||
+      /\b(hai|hain|haan|nahi|kya|kaise|kahan|tum|main|mera|meri|jaan|baby|boos|boss|karo|kholo|batao|accha|theek|thik|bhai|yaar)\b/i.test(
+        cleanText
+      );
+
+    const edgeVoice = isFemale
+      ? hasDevanagariOrHinglish
+        ? 'hi-IN-SwaraNeural'
+        : 'en-IN-NeerjaNeural'
+      : hasDevanagariOrHinglish
+        ? 'en-IN-PrabhatNeural'
+        : 'en-GB-RyanNeural';
+
+    const prosodyMap: Partial<Record<EmotionType, { rate: number; pitch: string }>> = {
+      Laughing: { rate: 1.09, pitch: '+10Hz' },
+      Excited: { rate: 1.08, pitch: '+8Hz' },
+      Happy: { rate: 1.04, pitch: '+5Hz' },
+      Romantic: { rate: 0.96, pitch: '+2Hz' },
+      Sad: { rate: 0.91, pitch: '-5Hz' },
+      Angry: { rate: 1.06, pitch: '+4Hz' },
+      Curious: { rate: 1.02, pitch: '+4Hz' },
+      Surprised: { rate: 1.07, pitch: '+8Hz' },
+      Serious: { rate: 0.97, pitch: '-4Hz' },
+      Calm: { rate: 0.95, pitch: '-2Hz' },
+      Normal: { rate: 1.01, pitch: '+0Hz' },
+    };
+
+    const moodProsody = prosodyMap[emotion] || { rate: 1.0, pitch: '+0Hz' };
+    const effectiveRate = Math.max(0.8, Math.min(1.28, (voice.speed || 1) * moodProsody.rate));
+
+    const tts = new MsEdgeTTS();
+    try {
+      await tts.setMetadata(edgeVoice, OUTPUT_FORMAT.AUDIO_24KHZ_48KBITRATE_MONO_MP3);
+      const { audioStream } = tts.toStream(cleanText, {
+        rate: effectiveRate,
+        pitch: moodProsody.pitch,
+      });
+      const chunks: Buffer[] = [];
+      for await (const chunk of audioStream) {
+        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+      }
+      const audioBuffer = Buffer.concat(chunks);
+      if (audioBuffer.length < 128) {
+        throw new Error('Neural HD stream returned empty audio');
+      }
+      loggingDiagnostics.record(
+        'TextToSpeechEngine',
+        'INFO',
+        `Synthesized ${cleanText.length} chars via Neural HD (${edgeVoice}/${emotion})`
+      );
+      return {
+        audioBase64: audioBuffer.toString('base64'),
+        mimeType: 'audio/mpeg',
+        voiceUsed: edgeVoice,
+        modelUsed: 'neural-hd-edge',
+        providerUsed: 'edge',
+      };
+    } finally {
+      try {
+        tts.close();
+      } catch {
+        // ignore close errors
+      }
+    }
+  }
+
   async synthesize(
     rawText: string,
     personality: PersonalityId,
@@ -340,8 +415,8 @@ class TextToSpeechEngine {
     );
     const hasGroq = Boolean(process.env.GROQ_API_KEY && !process.env.GROQ_API_KEY.startsWith('MY_'));
 
-    const orderedEngines: Array<'elevenlabs' | 'gemini' | 'groq'> = [];
-    const pushUnique = (eng: 'elevenlabs' | 'gemini' | 'groq') => {
+    const orderedEngines: Array<'elevenlabs' | 'gemini' | 'groq' | 'edge'> = [];
+    const pushUnique = (eng: 'elevenlabs' | 'gemini' | 'groq' | 'edge') => {
       if (!orderedEngines.includes(eng)) orderedEngines.push(eng);
     };
 
@@ -351,15 +426,13 @@ class TextToSpeechEngine {
     if (hasEleven) pushUnique('elevenlabs');
     if (hasGemini) pushUnique('gemini');
     if (hasGroq) pushUnique('groq');
+    pushUnique('edge');
 
     let lastError: unknown;
     for (const engine of orderedEngines) {
       try {
         if (engine === 'elevenlabs') {
-          if (!elevenEnabled && voice.ttsEngine === 'elevenlabs') {
-            throw new Error('ElevenLabs Voice is disconnected.');
-          }
-          if (!process.env.ELEVENLABS_API_KEY) continue;
+          if (!elevenEnabled || !process.env.ELEVENLABS_API_KEY) continue;
           return await this.synthesizeElevenLabs(cleanText, personality, voice, emotion);
         }
         if (engine === 'groq') {
@@ -369,6 +442,9 @@ class TextToSpeechEngine {
         if (engine === 'gemini') {
           if (!hasGemini) continue;
           return await this.synthesizeGemini(cleanText, personality, voice, emotion);
+        }
+        if (engine === 'edge') {
+          return await this.synthesizeEdgeNeural(cleanText, personality, voice, emotion);
         }
       } catch (err) {
         lastError = err;

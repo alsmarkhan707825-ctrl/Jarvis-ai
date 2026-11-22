@@ -78,9 +78,9 @@ class SelfEvolutionEngine {
 
     if (playfulBanterEnabled) {
       lines.push(
-        '\n\nPlayful Teasing & Mischief Directive (Shararat Mode ON):',
-        '- Feel free to playfully tease the user, make witty Hinglish/English comebacks, lightly pull their leg in good humor, show cheeky mock-attitude or playful disagreement, and keep banter fun and lively.',
-        '- Always keep teasing affectionate, harmless, and respectful—never genuinely abusive, and if the user asks for a direct serious answer or command execution, deliver the answer cleanly first with a light playful wink at the end.'
+        '\n\nLight Natural Wit Directive:',
+        '- Answer the user\'s question or command 100% logically and accurately FIRST.',
+        '- Only add subtle natural warmth or light wit when it genuinely fits the topic; never say random or off-topic lines.'
       );
     }
 

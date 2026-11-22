@@ -119,12 +119,23 @@ class AndroidAutomationEngine {
         nextStep.verificationNote = `Collected authorized Phone Intelligence (Battery ${scr.batteryPercent}%, ${scr.networkStatus})`;
       } else if (step.action === 'enter_text' && step.inputText) {
         accessibilityController.enterTextIntoNode(step.nodeId, step.nodeText, step.inputText);
+      } else if (step.action === 'call_phone') {
+        accessibilityController.performGesture(`call_phone("${step.inputText || step.nodeText || ''}")`);
+        nextStep.verificationNote = `Dialing / Calling "${step.inputText || step.nodeText || 'contact'}"`;
+      } else if (step.action === 'send_sms') {
+        accessibilityController.performGesture(`send_sms("${step.inputText || step.nodeText || ''}")`);
+        nextStep.verificationNote = `Prepared SMS dispatch (${step.nodeText || 'message'})`;
+      } else if (step.action === 'take_screenshot') {
+        accessibilityController.performGesture('take_screenshot');
+        nextStep.verificationNote = 'Screenshot capture triggered';
       } else if (
         step.action === 'open_wifi_settings' ||
         step.action === 'open_bluetooth_settings' ||
         step.action === 'open_sound_settings' ||
         step.action === 'open_dnd_settings' ||
         step.action === 'open_airplane_settings' ||
+        step.action === 'open_location_settings' ||
+        step.action === 'open_hotspot_settings' ||
         step.action === 'recent_apps' ||
         step.action === 'web_search' ||
         step.action === 'scroll' ||

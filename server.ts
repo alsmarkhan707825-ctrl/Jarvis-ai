@@ -164,10 +164,12 @@ async function bootstrap() {
     const configured = Boolean(key && !key.startsWith('MY_'));
     if (!configured) {
       res.json({
+        ok: false,
         configured: false,
         enabled: true,
         status: 'ENV_KEY_MISSING',
-        message: 'Set ELEVENLABS_API_KEY in AI Studio Secrets to activate ElevenLabs neural voices.',
+        error: 'Set ELEVENLABS_API_KEY in AI Studio Secrets or .env to activate ElevenLabs neural voices.',
+        message: 'Set ELEVENLABS_API_KEY in AI Studio Secrets or .env to activate ElevenLabs neural voices.',
       });
       return;
     }
@@ -176,18 +178,46 @@ async function bootstrap() {
         headers: { 'xi-api-key': key! },
         signal: AbortSignal.timeout(6000),
       });
+      if (resp.ok) {
+        const userJson = (await resp.json().catch(() => ({}))) as {
+          subscription?: { character_count?: number; character_limit?: number };
+        };
+        const limit = userJson.subscription?.character_limit ?? 0;
+        const used = userJson.subscription?.character_count ?? 0;
+        const remainingCredits = limit > 0 ? Math.max(0, limit - used) : undefined;
+        const quotaExhausted = remainingCredits !== undefined && remainingCredits < 40;
+        res.json({
+          ok: true,
+          configured: true,
+          enabled: true,
+          remainingCredits,
+          quotaExhausted,
+          status: quotaExhausted ? 'QUOTA_EXHAUSTED' : 'CONNECTED',
+          message: quotaExhausted
+            ? `ElevenLabs key verified par credits khatam hain (${remainingCredits} chars left). Built-in Neural HD Voice active hai.`
+            : remainingCredits !== undefined
+              ? `ElevenLabs Voice connected (${remainingCredits.toLocaleString()} chars left).`
+              : 'ElevenLabs Voice connected & active.',
+        });
+        return;
+      }
       res.json({
-        configured: true,
-        enabled: true,
-        status: resp.ok ? 'CONNECTED' : 'ERROR',
-        message: resp.ok ? 'ElevenLabs Voice connected & active.' : `ElevenLabs HTTP ${resp.status}`,
-      });
-    } catch (e) {
-      res.json({
+        ok: false,
         configured: true,
         enabled: true,
         status: 'ERROR',
-        message: e instanceof Error ? e.message : 'ElevenLabs connection test failed.',
+        error: `ElevenLabs HTTP ${resp.status}`,
+        message: `ElevenLabs HTTP ${resp.status} — Built-in Neural HD Voice backup active.`,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'ElevenLabs connection test failed.';
+      res.json({
+        ok: false,
+        configured: true,
+        enabled: true,
+        status: 'ERROR',
+        error: msg,
+        message: msg,
       });
     }
   });
@@ -206,7 +236,7 @@ async function bootstrap() {
         }
       }
     });
-    res.json({ enabled: false, status: 'DISCONNECTED', message: 'ElevenLabs Voice disconnected.' });
+    res.json({ ok: true, enabled: false, status: 'DISCONNECTED', message: 'ElevenLabs Voice disconnected.' });
   });
 
   app.post('/api/voice/elevenlabs/test', async (_req, res) => {
@@ -214,8 +244,10 @@ async function bootstrap() {
     const key = process.env.ELEVENLABS_API_KEY;
     if (!key || key.startsWith('MY_')) {
       res.json({
+        ok: false,
         configured: false,
         status: 'ENV_KEY_MISSING',
+        error: 'Add ELEVENLABS_API_KEY in AI Studio > Settings > Secrets.',
         message: 'Add ELEVENLABS_API_KEY in AI Studio > Settings > Secrets.',
       });
       return;
@@ -225,20 +257,59 @@ async function bootstrap() {
         headers: { 'xi-api-key': key },
         signal: AbortSignal.timeout(7000),
       });
+      if (resp.ok) {
+        const userJson = (await resp.json().catch(() => ({}))) as {
+          subscription?: { character_count?: number; character_limit?: number };
+        };
+        const limit = userJson.subscription?.character_limit ?? 0;
+        const used = userJson.subscription?.character_count ?? 0;
+        const remainingCredits = limit > 0 ? Math.max(0, limit - used) : undefined;
+        const quotaExhausted = remainingCredits !== undefined && remainingCredits < 40;
+        res.json({
+          ok: true,
+          configured: true,
+          remainingCredits,
+          quotaExhausted,
+          status: quotaExhausted ? 'QUOTA_EXHAUSTED' : 'CONNECTED',
+          latencyMs: Date.now() - start,
+          message: quotaExhausted
+            ? `Key valid par credits khatam (${remainingCredits} chars left). Built-in Neural HD Voice automatically active hai!`
+            : remainingCredits !== undefined
+              ? `ElevenLabs verified! ${remainingCredits.toLocaleString()} credits available.`
+              : 'ElevenLabs Voice Key verified!',
+        });
+        return;
+      }
       res.json({
-        configured: true,
-        status: resp.ok ? 'CONNECTED' : 'ERROR',
-        latencyMs: Date.now() - start,
-        message: resp.ok ? 'ElevenLabs Voice Key verified!' : `ElevenLabs HTTP ${resp.status}`,
-      });
-    } catch (e) {
-      res.json({
+        ok: false,
         configured: true,
         status: 'ERROR',
         latencyMs: Date.now() - start,
-        message: e instanceof Error ? e.message : 'ElevenLabs check failed.',
+        error: `ElevenLabs HTTP ${resp.status}`,
+        message: `ElevenLabs HTTP ${resp.status}`,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : 'ElevenLabs check failed.';
+      res.json({
+        ok: false,
+        configured: true,
+        status: 'ERROR',
+        latencyMs: Date.now() - start,
+        error: msg,
+        message: msg,
       });
     }
+  });
+
+  app.post('/api/system/reset-memory', (_req, res) => {
+    const fresh = storageStore.resetConversationsAndMemory();
+    res.json({
+      ok: true,
+      conversationsCount: fresh.conversations.length,
+      memoriesCount: fresh.memories.length,
+      traitsCount: fresh.adaptiveTraits.length,
+      message: 'Purani sabhi chats, memory aur traits delete karke fresh setup kar diya gaya hai.',
+    });
   });
 
   // Live Real-Time Weather Route (Open-Meteo, zero API key required)
@@ -722,8 +793,13 @@ async function bootstrap() {
 
       const systemPrompt =
         `${modelConfig.systemPrompt}\n${emotionDirective}${memoryContext}${evolutionDirective}` +
-        `\nNatural Voice Rule: Speak 100% like a real person in natural Hinglish, Hindi, or English. NEVER refer to yourself as an AI, bot, assistant, or Aria. Strictly ZERO emojis, ZERO emoticons, ZERO asterisks, ZERO markdown.` +
-        `\nCreator Rule: Only if directly introducing yourself or asked who created/made you, mention alsmar Boos (Mujhe alsmar Boos ne banaya hai).` +
+        `\nNatural Voice Rule: Speak 100% like a real person in natural Hinglish, Hindi, or English. ${
+          effectivePersonality === 'girl'
+            ? 'Your name is Maya. NEVER refer to yourself as an AI, bot, assistant, or Aria.'
+            : 'NEVER refer to yourself as an AI, bot, assistant, or Aria.'
+        } Strictly ZERO emojis, ZERO emoticons, ZERO asterisks, ZERO markdown.` +
+        `\nLogic Rule: Always answer the user's actual message directly, accurately, and logically. No irrelevant drama, no fake complaints, no random nonsense.` +
+        `\nCreator Rule: Only if introducing yourself or asked who created/made you, say ALSMAR BOSS created you (Mujhe ALSMAR BOSS ne banaya hai).` +
         `\nCurrent Local Date & Time: ${liveTimeStr}.` +
         (contextNotes.length > 0 ? `\n\nReal-Time Device & Task Context:\n${contextNotes.join('\n')}` : '');
 
@@ -735,31 +811,81 @@ async function bootstrap() {
       let providerUsed: ProviderId = modelConfig.provider;
       let modelUsed = modelConfig.model;
       let fullReply = '';
-      let prefixBuffer = '';
-      let prefixResolved = false;
+      let streamMoodBuffer = '';
+      let sentenceAccumulator = '';
+      let activeStreamEmotion: EmotionType = currentEmotion;
       let detectedTagEmotion: EmotionType | undefined;
+      let explicitTagSinceLastSentence = false;
+
+      sendEvent('emotion', { emotion: activeStreamEmotion });
 
       const emitCleanText = (rawSegment: string) => {
         const noMood = rawSegment.replace(/\[MOOD:[A-Za-z]+\]\s*/gi, '');
         const cleanChunk = AudioProcessingEngine.stripEmojisAndMarkdown(noMood);
-        if (cleanChunk) {
-          fullReply += cleanChunk;
-          sendEvent('delta', { text: cleanChunk });
+        if (!cleanChunk) return;
+
+        fullReply += cleanChunk;
+        sentenceAccumulator += cleanChunk;
+
+        if (!explicitTagSinceLastSentence && /[.!?।\n]/.test(cleanChunk)) {
+          const detected = emotionEngine.detectSentenceMood(
+            sentenceAccumulator,
+            effectivePersonality,
+            activeStreamEmotion
+          );
+          if (detected !== activeStreamEmotion) {
+            activeStreamEmotion = detected;
+            detectedTagEmotion = detected;
+            sendEvent('emotion', { emotion: detected });
+          }
+          sentenceAccumulator = '';
+          explicitTagSinceLastSentence = false;
+        } else if (/[.!?।\n]/.test(cleanChunk)) {
+          sentenceAccumulator = '';
+          explicitTagSinceLastSentence = false;
         }
+
+        sendEvent('delta', { text: cleanChunk, emotion: activeStreamEmotion });
       };
 
-      const resolvePrefix = (buf: string): string => {
-        const trimmedLeft = buf.replace(/^\s+/, '');
-        const moodMatch = trimmedLeft.match(/^\[MOOD:([A-Za-z]+)\]\s*/i);
-        if (moodMatch) {
-          const parsedMood = matchEmotionName(moodMatch[1]);
+      const processMoodBuffer = (flushAll: boolean) => {
+        while (streamMoodBuffer.length > 0) {
+          const match = /\[MOOD:([A-Za-z]+)\]\s*/i.exec(streamMoodBuffer);
+          if (!match) break;
+
+          const before = streamMoodBuffer.slice(0, match.index);
+          if (before) {
+            emitCleanText(before);
+          }
+
+          const parsedMood = matchEmotionName(match[1]);
           if (parsedMood) {
+            activeStreamEmotion = parsedMood;
             detectedTagEmotion = parsedMood;
+            explicitTagSinceLastSentence = true;
             sendEvent('emotion', { emotion: parsedMood });
           }
-          return trimmedLeft.slice(moodMatch[0].length);
+          streamMoodBuffer = streamMoodBuffer.slice(match.index + match[0].length);
         }
-        return buf;
+
+        if (!streamMoodBuffer) return;
+
+        if (!flushAll) {
+          const lastOpen = streamMoodBuffer.lastIndexOf('[');
+          if (
+            lastOpen !== -1 &&
+            streamMoodBuffer.length - lastOpen <= 24 &&
+            /^\[(?:m(?:o(?:o(?:d(?::[a-z]*)?)?)?)?)?$/i.test(streamMoodBuffer.slice(lastOpen))
+          ) {
+            const safePrefix = streamMoodBuffer.slice(0, lastOpen);
+            if (safePrefix) emitCleanText(safePrefix);
+            streamMoodBuffer = streamMoodBuffer.slice(lastOpen);
+            return;
+          }
+        }
+
+        emitCleanText(streamMoodBuffer);
+        streamMoodBuffer = '';
       };
 
       const stream = errorRecoveryEngine.executeWithFallback(
@@ -782,32 +908,11 @@ async function bootstrap() {
       );
 
       for await (const chunk of stream) {
-        if (!prefixResolved) {
-          prefixBuffer += chunk;
-          const trimmedLeft = prefixBuffer.replace(/^\s+/, '');
-          if (trimmedLeft.length > 0 && !trimmedLeft.startsWith('[')) {
-            prefixResolved = true;
-            emitCleanText(prefixBuffer);
-            prefixBuffer = '';
-          } else if (trimmedLeft.startsWith('[') && trimmedLeft.includes(']')) {
-            const remainder = resolvePrefix(prefixBuffer);
-            prefixResolved = true;
-            prefixBuffer = '';
-            if (remainder) emitCleanText(remainder);
-          } else if (prefixBuffer.length > 32) {
-            prefixResolved = true;
-            emitCleanText(prefixBuffer);
-            prefixBuffer = '';
-          }
-        } else {
-          emitCleanText(chunk);
-        }
+        streamMoodBuffer += chunk;
+        processMoodBuffer(false);
       }
 
-      if (!prefixResolved && prefixBuffer) {
-        const remainder = resolvePrefix(prefixBuffer);
-        if (remainder) emitCleanText(remainder);
-      }
+      processMoodBuffer(true);
 
       const latencyMs = Date.now() - startTime;
       const finalEmotion =
@@ -890,9 +995,9 @@ async function bootstrap() {
       const proactivePrompt =
         safePersonality === 'girl'
           ? `${modelConfig.systemPrompt}${evolutionDirective}\n` +
-            'Initiate a spontaneous, real-girlfriend check-in with your boyfriend ("baby" or "jaan") in 1-2 short natural Hinglish sentences! Ask logically where he went, why he is quiet, tease him playfully, or act slightly naraz/romantic. NEVER mention AI or Aria. Strictly NO emojis, NO emoticons, NO asterisks.'
+            'You are Maya (created by ALSMAR BOSS). Initiate a brief, caring, natural check-in in 1-2 short logical Hinglish sentences — e.g. asking how his work is going or if he needs anything. NEVER invent fake complaints, NEVER mention AI or Aria. Strictly NO emojis, NO emoticons, NO asterisks.'
           : `${modelConfig.systemPrompt}${evolutionDirective}\n` +
-            'Initiate a brief, witty Tony-Stark Iron Man JARVIS check-in addressing Sir/Boss in 1-2 short natural sentences. NEVER say you are an AI. Strictly NO emojis, NO emoticons, NO asterisks.';
+            'Initiate a brief, sharp Tony-Stark Iron Man JARVIS check-in addressing Sir/Boss (created by ALSMAR BOSS) in 1-2 short natural sentences. NEVER say you are an AI. Strictly NO emojis, NO emoticons, NO asterisks.';
 
       const historyMessages = thread.messages.slice(-6).map((m) => ({
         role: (m.role === 'assistant' ? 'assistant' : 'user') as 'user' | 'assistant',
@@ -914,8 +1019,8 @@ async function bootstrap() {
               role: 'user',
               content:
                 safePersonality === 'girl'
-                  ? `[System Auto-Check-In] Boyfriend thodi der se chup hai. Khud aakar apni girlfriend wali logical baat puchho (jaise aaj kahan the, itni der kyon laga rahe ho, khana khaya ya naraz/romantic mood mein puchho). Device: ${intel.batteryPercent}% battery.`
-                  : `[System Auto-Check-In] User is idle. Deliver a brief, witty Iron Man JARVIS status check-in. Device note: ${intel.batteryPercent}% battery, ${intel.unreadNotifications.length} notifications.`,
+                  ? `[System Auto-Check-In] Maya, user thodi der se chup hai. Ek natural, logical aur pyaara 1-sentence check-in puchho bina kisi faltu drame ke. Device: ${intel.batteryPercent}% battery.`
+                  : `[System Auto-Check-In] User is idle. Deliver a brief, logical Iron Man JARVIS status check-in. Device note: ${intel.batteryPercent}% battery, ${intel.unreadNotifications.length} notifications.`,
             },
           ],
           thinkingSpeed: 'LOW',

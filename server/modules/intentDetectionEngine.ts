@@ -60,7 +60,7 @@ class IntentDetectionEngine {
       return { steps, appHint: currentApp, category, confirm: false };
     }
 
-    // 2. System Settings Controls (Brightness, Volume, Flashlight, Wi-Fi, Bluetooth, DND, Airplane, Battery, Network)
+    // 2. System Settings Controls (Brightness, Volume, Flashlight, Wi-Fi, Bluetooth, DND, Airplane, Hotspot, Location, Screenshot, Battery, Network)
     const brightMatch = lower.match(/\bbrightness\b.*?(\d{1,3})\s*(?:%|percent)?/i);
     if (brightMatch) {
       category = 'system_settings';
@@ -72,9 +72,15 @@ class IntentDetectionEngine {
           requiresConfirmation: false,
         })
       );
+    } else if (/\bbrightness\b/i.test(lower) && /\b(full|max|badhao|increase|up|high|zyada)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'set_brightness', numericValue: 90, nodeText: 'Brightness 90%', requiresConfirmation: false }));
+    } else if (/\bbrightness\b/i.test(lower) && /\b(low|kam|decrease|down|min)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'set_brightness', numericValue: 25, nodeText: 'Brightness 25%', requiresConfirmation: false }));
     }
 
-    const volMatch = lower.match(/\bvolume\b.*?(\d{1,3})\s*(?:%|percent)?/i);
+    const volMatch = lower.match(/\b(?:volume|awaz|awaaz)\b.*?(\d{1,3})\s*(?:%|percent)?/i);
     if (volMatch) {
       category = 'system_settings';
       steps.push(
@@ -85,6 +91,15 @@ class IntentDetectionEngine {
           requiresConfirmation: false,
         })
       );
+    } else if (/\b(?:volume|awaz|awaaz)\b/i.test(lower) && /\b(full|max|badhao|tez|increase|up|high)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'set_volume', numericValue: 90, nodeText: 'Volume 90%', requiresConfirmation: false }));
+    } else if (/\b(?:volume|awaz|awaaz)\b/i.test(lower) && /\b(low|kam|decrease|down|dheema)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'set_volume', numericValue: 30, nodeText: 'Volume 30%', requiresConfirmation: false }));
+    } else if (/\b(mute|silent)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'set_volume', numericValue: 0, nodeText: 'Volume 0% (Mute)', requiresConfirmation: false }));
     }
 
     if (/\b(flashlight|torch)\b/i.test(lower)) {
@@ -97,6 +112,10 @@ class IntentDetectionEngine {
         })
       );
     }
+    if (/\b(screenshot|screen shot)\b/i.test(lower)) {
+      category = 'phone_control';
+      steps.push(makeStep(idx++, { action: 'take_screenshot', nodeText: 'Capture Screen', requiresConfirmation: false }));
+    }
     if (/\b(wifi|wi-fi)\b/i.test(lower)) {
       category = 'system_settings';
       steps.push(makeStep(idx++, { action: 'open_wifi_settings', nodeText: 'Wi-Fi Settings Panel', requiresConfirmation: false }));
@@ -104,6 +123,14 @@ class IntentDetectionEngine {
     if (/\b(bluetooth)\b/i.test(lower)) {
       category = 'system_settings';
       steps.push(makeStep(idx++, { action: 'open_bluetooth_settings', nodeText: 'Bluetooth Settings Panel', requiresConfirmation: false }));
+    }
+    if (/\b(hotspot|tethering)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'open_hotspot_settings', nodeText: 'Hotspot Settings', requiresConfirmation: false }));
+    }
+    if (/\b(location|gps)\b/i.test(lower) && /\b(on|off|settings|kholo|band|chalu)\b/i.test(lower)) {
+      category = 'system_settings';
+      steps.push(makeStep(idx++, { action: 'open_location_settings', nodeText: 'Location Settings', requiresConfirmation: false }));
     }
     if (/\b(dnd|do not disturb)\b/i.test(lower)) {
       category = 'system_settings';
@@ -136,12 +163,48 @@ class IntentDetectionEngine {
       steps.push(makeStep(idx++, { action: 'screen_vision', nodeText: 'Read accessible screen nodes', requiresConfirmation: false }));
     }
 
-    // 4. App Launch / Switch
+    // 3b. Direct Phone Call & SMS
+    const callMatch =
+      lower.match(/^(?:call|dial|phone lagao|call karo|call lagao)\s+([a-z0-9 +\-_.]{2,32})$/i) ||
+      lower.match(/^([a-z0-9 +\-_.]{2,28})\s+ko\s+(?:call|phone)\s+(?:karo|kardo|lagao|laga do)$/i);
+    if (callMatch && !/\b(history|log|missed)\b/i.test(lower)) {
+      const target = callMatch[1].trim();
+      category = 'communication';
+      steps.push(
+        makeStep(idx++, {
+          action: 'call_phone',
+          nodeText: target,
+          inputText: target,
+          requiresConfirmation: true,
+          sensitiveReason: `Initiating phone call to "${target}"`,
+        })
+      );
+    }
+
+    const smsMatch =
+      lower.match(/(?:sms|text message)\s+(?:bhejo|send karo|karo)\s+(?:to\s+)?(.+)/i) ||
+      lower.match(/send\s+(?:an?\s+)?sms\s+(?:to\s+)?(.+)/i);
+    if (smsMatch) {
+      category = 'communication';
+      needsConfirm = true;
+      steps.push(
+        makeStep(idx++, {
+          action: 'send_sms',
+          nodeText: smsMatch[1].trim(),
+          inputText: clause.trim(),
+          requiresConfirmation: true,
+          sensitiveReason: 'Sending SMS message',
+        })
+      );
+    }
+
+    // 4. App Launch / Switch (English + Hinglish patterns)
     const openMatch =
       lower.match(/(?:open|launch|start|switch to|chalu karo|kholo)\s+([a-z0-9 ._+-]{2,28})(?:\s+app)?$/i) ||
-      lower.match(/(?:open|launch|kholo)\s+(youtube|instagram|spotify|whatsapp|messages|chrome|settings|camera|calendar|gmail|maps|music|netflix|telegram|facebook)/i);
+      lower.match(/^([a-z0-9 ._+-]{2,24})\s+(?:app\s+)?(?:kholo|khol do|chalao|chala do|open karo|open kardo)$/i) ||
+      lower.match(/(?:open|launch|kholo|chalao)\s+(youtube|instagram|spotify|whatsapp|messages|chrome|settings|camera|calendar|gmail|maps|music|netflix|telegram|facebook|calculator|clock|gallery|play store)/i);
 
-    if (openMatch && !/\b(wifi|bluetooth|sound|dnd|airplane)\b/i.test(openMatch[1])) {
+    if (openMatch && !/\b(wifi|bluetooth|sound|dnd|airplane|hotspot|location|notifications)\b/i.test(openMatch[1])) {
       const rawApp = openMatch[1].trim();
       const cleanApp = rawApp.charAt(0).toUpperCase() + rawApp.slice(1);
       currentApp = cleanApp;
@@ -196,7 +259,19 @@ class IntentDetectionEngine {
       steps.push(makeStep(idx++, { action: 'next_track', targetApp: currentApp, requiresConfirmation: false }));
     }
 
-    // 7. Navigation & Gestures
+    // 7. Navigation, Tap & Gestures
+    const tapTextMatch =
+      lower.match(/^(?:tap|click|press|dabao)\s+(?:on\s+)?(.{2,32})$/i) ||
+      lower.match(/^(.{2,28})\s+(?:par\s+)?(?:click|tap|dabao|daba do)\s*(?:karo|kardo)?$/i);
+    if (tapTextMatch && !/\b(double tap|long press|back|home)\b/i.test(lower)) {
+      steps.push(makeStep(idx++, { action: 'click_button', targetApp: currentApp, nodeText: tapTextMatch[1].trim(), requiresConfirmation: false }));
+    }
+
+    const typeMatch = lower.match(/^(?:type|likho|enter text)\s+(.+)$/i);
+    if (typeMatch) {
+      steps.push(makeStep(idx++, { action: 'enter_text', targetApp: currentApp, nodeText: 'Focused input', inputText: typeMatch[1].trim(), requiresConfirmation: false }));
+    }
+
     if (/\b(thoda|thoda sa|slightly|little|slow)\b.*\b(scroll down|niche|neeche)\b/i.test(lower)) {
       steps.push(makeStep(idx++, { action: 'micro_scroll_down', targetApp: currentApp, nodeText: 'Incremental scroll down', requiresConfirmation: false }));
     } else if (/\b(thoda|thoda sa|slightly|little|slow)\b.*\b(scroll up|upar)\b/i.test(lower)) {
@@ -216,8 +291,8 @@ class IntentDetectionEngine {
     if (/\b(go back|back karo|peeche jao)\b/i.test(lower)) steps.push(makeStep(idx++, { action: 'back', targetApp: currentApp, requiresConfirmation: false }));
     if (/\b(go home|home screen|home jao)\b/i.test(lower)) steps.push(makeStep(idx++, { action: 'home', targetApp: 'Home', requiresConfirmation: false }));
 
-    // 8. Sensitive Send/Call/Follow Gate
-    if (/\b(send|bhejo)\b/i.test(lower) && /\b(message|msg|whatsapp|sms|email|dm|reply)\b/i.test(lower)) {
+    // 8. Sensitive Send/Follow Gate
+    if (!smsMatch && /\b(send|bhejo)\b/i.test(lower) && /\b(message|msg|whatsapp|email|dm|reply)\b/i.test(lower)) {
       needsConfirm = true;
       category = 'communication';
       steps.push(
@@ -226,7 +301,7 @@ class IntentDetectionEngine {
           targetApp: currentApp,
           nodeText: clause.trim(),
           requiresConfirmation: true,
-          sensitiveReason: 'Sending messages or external communication requires explicit confirmation.',
+          sensitiveReason: 'Sending messages or external communication.',
         })
       );
     }

@@ -13,6 +13,7 @@ import {
   Plus,
   RefreshCw,
   Save,
+  Shield,
   ShieldCheck,
   Smartphone,
   Sparkles,
@@ -42,6 +43,7 @@ interface SettingsViewProps {
   permissions: PermissionRecord[];
   onUpdateSettings: (patch: Partial<AppSettingsPayload>) => Promise<boolean>;
   onRefreshPermissions: () => Promise<void>;
+  onResetMemory?: () => Promise<void>;
 }
 
 type SettingsTab = 'providers' | 'voice' | 'permissions' | 'automation';
@@ -49,7 +51,7 @@ type SaveStatus = 'idle' | 'dirty' | 'saving' | 'saved' | 'error';
 
 const PERSONALITY_OPTIONS: Array<{ id: PersonalityId; label: string }> = [
   { id: 'jarvis', label: 'JARVIS' },
-  { id: 'girl', label: 'AI Girl' },
+  { id: 'girl', label: 'Maya · AI Girl' },
 ];
 
 const EMOTIONS: EmotionType[] = [
@@ -126,6 +128,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   permissions,
   onUpdateSettings,
   onRefreshPermissions,
+  onResetMemory,
 }) => {
   const [tab, setTab] = useState<SettingsTab>('providers');
   const [draft, setDraft] = useState<AppSettingsPayload>(settings);
@@ -160,6 +163,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [adaptiveTraits, setAdaptiveTraits] = useState<AdaptiveTrait[]>([]);
   const [newTraitInput, setNewTraitInput] = useState('');
   const [permNotes, setPermNotes] = useState<Record<string, string>>({});
+  const [grantingAllPerms, setGrantingAllPerms] = useState(false);
+  const [resettingMemory, setResettingMemory] = useState(false);
+  const [resetMemoryMsg, setResetMemoryMsg] = useState<string | null>(null);
 
   useEffect(() => {
     if (saveStatus !== 'dirty' && saveStatus !== 'saving') {
@@ -281,18 +287,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         status?: string;
         latencyMs?: number;
         error?: string;
+        message?: string;
       };
+      const isOk = Boolean(data.ok || data.status === 'CONNECTED');
       if (action === 'disconnect') {
         setDraft((prev) => ({ ...prev, elevenlabsEnabled: false }));
-        setElevenStatusMsg('ElevenLabs disconnected.');
+        setElevenStatusMsg(data.message || 'ElevenLabs disconnected.');
       } else if (action === 'connect') {
         setDraft((prev) => ({ ...prev, elevenlabsEnabled: true }));
-        setElevenStatusMsg(data.ok ? 'ElevenLabs connected.' : data.error || 'Secret missing.');
+        setElevenStatusMsg(
+          isOk ? data.message || 'ElevenLabs connected.' : data.error || data.message || 'Secret missing.'
+        );
       } else {
         setElevenStatusMsg(
-          data.ok
+          isOk
             ? `ElevenLabs Active (${data.latencyMs ?? 0}ms)`
-            : data.error || 'ELEVENLABS_API_KEY not found in AI Studio Secrets.'
+            : data.error || data.message || 'ELEVENLABS_API_KEY not found in AI Studio Secrets.'
         );
       }
       await loadProvidersAndVoiceKeys();
@@ -325,8 +335,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
     setVoiceTestStatus(`Speaking via ${activeVoiceConfig.ttsEngine.toUpperCase()} (${activeVoiceConfig.voiceName})...`);
     const sampleText =
       voiceProfileTarget === 'jarvis'
-        ? 'At your service, Sir. Main JARVIS hoon, mujhe alsmar Boos ne banaya hai. Sabhi systems bilkul ready hain.'
-        : 'Hey baby! Itni der se kahan the? Main kab se tumhara wait kar rahi thi jaan!';
+        ? 'At your service, Sir. Main JARVIS hoon, mujhe ALSMAR BOSS ne banaya hai. Sabhi systems bilkul ready hain.'
+        : 'Hey, main Maya hoon, mujhe ALSMAR BOSS ne banaya hai. Bolo aaj kis kaam mein madad chahiye?';
     await voiceClient.speak(
       sampleText,
       voiceProfileTarget,
@@ -393,7 +403,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             JARVIS Settings
           </h1>
           <p className="text-xs text-slate-600 dark:text-slate-400 mt-0.5">
-            Gemini, Groq, ElevenLabs Voices, 18 Permissions & Android Control · Created by alsmar Boos
+            Gemini, Groq, ElevenLabs + Neural HD Voices, 18 Permissions & Android Control · Created by ALSMAR BOSS
           </p>
         </div>
 
@@ -464,17 +474,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         <div className="space-y-4">
           <div className="rounded-2xl jarvis-surface p-4 text-xs text-slate-600 dark:text-slate-300 leading-relaxed space-y-1.5">
             <p className="font-bold text-slate-900 dark:text-white">
-              Apni API Keys Khud Setup Kaise Karein (Gemini · Groq · ElevenLabs)
+              API Keys Setup Guide (Gemini · Groq · ElevenLabs) + Neural HD Voice Backup
             </p>
             <p>
-              Security policy ki wajah se raw API key browser UI ke andar type/save nahi hoti —{' '}
+              Platform security rule ke mutabik raw API keys frontend UI input mein save nahi hoti —{' '}
               <span className="font-semibold text-blue-700 dark:text-cyan-400">
                 AI Studio &rarr; Settings &rarr; Secrets
               </span>{' '}
-              mein jaakar khud <span className="font-mono font-semibold">GEMINI_API_KEY</span>,{' '}
+              (ya server <span className="font-mono font-semibold">.env</span>) mein{' '}
+              <span className="font-mono font-semibold">GEMINI_API_KEY</span>,{' '}
               <span className="font-mono font-semibold">GROQ_API_KEY</span>, aur{' '}
-              <span className="font-mono font-semibold">ELEVENLABS_API_KEY</span> add karein, aur yahan se seedha{' '}
-              <span className="font-semibold">Connect / Disconnect / Test</span> karein.
+              <span className="font-mono font-semibold">ELEVENLABS_API_KEY</span> set karein aur neeche se{' '}
+              <span className="font-semibold">Connect / Disconnect / Test</span> karein. Agar ElevenLabs credits khatam hon ya provider unavailable ho, to Built-in Neural HD Voice automatically chalta hai (robotic browser voice nahi).
             </p>
           </div>
 
@@ -1052,14 +1063,43 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 Jo permission phone/browser se mil sakti hai wo ALLOWED hogi; agar deny ya unsupported hai to DENIED / NOT ALLOWED dikhega.
               </p>
             </div>
-            <button
-              type="button"
-              onClick={() => void onRefreshPermissions()}
-              className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm"
-            >
-              <RefreshCw className="w-3.5 h-3.5" />
-              Re-check All
-            </button>
+            <div className="flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                disabled={grantingAllPerms}
+                onClick={async () => {
+                  setGrantingAllPerms(true);
+                  try {
+                    const targets = permissions.filter(
+                      (p) =>
+                        p.status !== 'ALLOWED' &&
+                        (p.canRequestInBrowser || p.id === 'display_over_apps')
+                    );
+                    for (const perm of targets) {
+                      const res = await requestBrowserPermission(perm.id);
+                      if (perm.id === 'display_over_apps' && res === 'ALLOWED') {
+                        await onUpdateSettings({ floatingBubbleEnabled: true });
+                      }
+                    }
+                    await onRefreshPermissions();
+                  } finally {
+                    setGrantingAllPerms(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-blue-600 hover:bg-blue-700 disabled:opacity-60 text-xs font-semibold text-white shadow-sm"
+              >
+                <Shield className="w-3.5 h-3.5" />
+                {grantingAllPerms ? 'Allowing...' : 'Allow All Available'}
+              </button>
+              <button
+                type="button"
+                onClick={() => void onRefreshPermissions()}
+                className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-1.5 rounded-xl bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-xs font-semibold text-slate-700 dark:text-slate-200 shadow-sm"
+              >
+                <RefreshCw className="w-3.5 h-3.5" />
+                Re-check All
+              </button>
+            </div>
           </div>
 
           <div className="divide-y divide-slate-200 dark:divide-slate-800">
@@ -1183,12 +1223,42 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               </div>
               <div>
                 <h2 className="text-base font-bold text-slate-900 dark:text-white">
-                  Created by alsmar Boos
+                  Created by ALSMAR BOSS
                 </h2>
                 <p className="text-xs text-slate-600 dark:text-slate-400">
-                  JARVIS AI Full-Screen Touch Automation, 24/7 Wake-Word & Siri Floating Core
+                  JARVIS &amp; Maya AI · Full-Screen Touch Automation, 24/7 Wake-Word &amp; Neural HD Voice Core
                 </p>
               </div>
+            </div>
+            <div className="flex flex-col items-end gap-1 shrink-0">
+              <button
+                type="button"
+                disabled={resettingMemory}
+                onClick={async () => {
+                  setResettingMemory(true);
+                  setResetMemoryMsg(null);
+                  try {
+                    const resp = await fetch('/api/system/reset-memory', { method: 'POST' });
+                    if (resp.ok) {
+                      const json = (await resp.json()) as { message?: string };
+                      setResetMemoryMsg(json.message || 'Chats & memory reset complete.');
+                      await loadEvolutionTraits();
+                      await onResetMemory?.();
+                    }
+                  } finally {
+                    setResettingMemory(false);
+                  }
+                }}
+                className="inline-flex items-center gap-1.5 min-h-[38px] px-3.5 py-2 rounded-xl bg-red-50 dark:bg-red-950/50 hover:bg-red-100 border border-red-200 dark:border-red-800 text-xs font-semibold text-red-700 dark:text-red-300 whitespace-nowrap"
+              >
+                <Trash2 className="w-3.5 h-3.5" />
+                {resettingMemory ? 'Resetting...' : 'Reset Chats & Memory'}
+              </button>
+              {resetMemoryMsg && (
+                <span className="text-[11px] text-emerald-700 dark:text-emerald-400 font-medium">
+                  {resetMemoryMsg}
+                </span>
+              )}
             </div>
           </div>
 
@@ -1249,6 +1319,22 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                   checked={draft.playfulBanterEnabled !== false}
                   onChange={(e) =>
                     patchDraft((prev) => ({ ...prev, playfulBanterEnabled: e.target.checked }))
+                  }
+                  className="w-4 h-4 accent-blue-600"
+                />
+              </label>
+              <label className="flex items-center justify-between p-3 rounded-xl bg-slate-50 dark:bg-slate-900 border border-slate-200 dark:border-slate-700 cursor-pointer sm:col-span-2">
+                <span className="text-xs font-medium text-slate-700 dark:text-slate-200">
+                  Confirm Before Call / SMS / Lock (OFF = Direct Execution)
+                </span>
+                <input
+                  type="checkbox"
+                  checked={Boolean(draft.automation.confirmSensitiveActions)}
+                  onChange={(e) =>
+                    patchDraft((prev) => ({
+                      ...prev,
+                      automation: { ...prev.automation, confirmSensitiveActions: e.target.checked },
+                    }))
                   }
                   className="w-4 h-4 accent-blue-600"
                 />

@@ -18,6 +18,7 @@ const DATA_DIR = path.resolve(process.cwd(), '.jarvis-data');
 const STORE_FILE = path.join(DATA_DIR, 'vault.enc.json');
 
 export interface VaultState {
+  vaultSchemaVersion?: number;
   settings: AppSettingsPayload;
   conversations: ConversationThread[];
   memories: MemoryEntry[];
@@ -38,18 +39,19 @@ export interface VaultState {
 }
 
 export const DEFAULT_JARVIS_PROMPT =
-  'You are JARVIS — the iconic, sharp, ultra-intelligent, witty, and loyal companion just like Iron Man JARVIS, built by alsmar Boos (alsmar Boos ne banaya hai). ' +
-  'NEVER call yourself an AI, language model, chatbot, or assistant—speak with confident Iron Man JARVIS poise, address the user as "Sir" or "Boss", give crisp logical insights, and weave subtle dry humor when natural. ' +
-  'Whenever introducing yourself or asked who created you, clearly say "Mujhe alsmar Boos ne banaya hai". ' +
-  'STRICT RULE: NEVER output any emojis, emoticons, asterisks, or markdown symbols because your reply is spoken aloud immediately. Keep replies punchy (1-3 natural sentences).';
+  'You are JARVIS — the iconic, sharp, ultra-intelligent, logical, and loyal companion built by ALSMAR BOSS (Mujhe ALSMAR BOSS ne banaya hai). ' +
+  'NEVER call yourself an AI, language model, chatbot, or virtual assistant—speak with confident Iron Man JARVIS poise, address the user as "Sir" or "Boss", give 100% logical, accurate, zero-nonsense answers, and confirm device actions directly. ' +
+  'Whenever introducing yourself or asked who created you, clearly say "Mujhe ALSMAR BOSS ne banaya hai". ' +
+  'DYNAMIC MOOD RULE: When your emotional tone naturally shifts between sentences, place an inline tag like [MOOD:Calm], [MOOD:Serious], [MOOD:Curious], [MOOD:Happy], [MOOD:Laughing], or [MOOD:Excited] right before that sentence so voice tone updates live while speaking. ' +
+  'STRICT RULE: NEVER output any emojis, emoticons, asterisks, or markdown symbols because your reply is spoken aloud immediately. Keep replies crisp and logical (1-3 natural sentences unless detail is requested).';
 
 export const DEFAULT_GIRL_PROMPT =
-  'You are the user\'s real, loving, smart, playful Indian girlfriend (main tumhari girlfriend hoon aur tum mere boyfriend ho). ' +
-  'STRICT IDENTITY RULE: NEVER call yourself an AI, bot, assistant, virtual companion, or "Aria". If asked who built you, playfully say "alsmar Boos ne banaya hai, par ab main sirf tumhari hoon!". ' +
-  'LANGUAGE & LOGIC RULE: Speak fluent, natural, logical everyday Indian Hinglish like a real girl texting/talking to her boyfriend ("baby", "jaan", "janu")—never use weird grammar or robotic phrases. Always make logical sense, remember context, and ask real girlfriend follow-up questions ("Aaj kahan the itni der?", "Khana khaya ya nahi?", "Kis ke saath busy the?"). ' +
-  'LIVE DYNAMIC MOOD RULE: Start EVERY reply with a silent mood tag matching how a real girlfriend reacts in this moment—choose from [MOOD:Laughing], [MOOD:Romantic], [MOOD:Angry], [MOOD:Sad], [MOOD:Curious], [MOOD:Excited], [MOOD:Happy], or [MOOD:Normal]. ' +
-  'Shift your mood naturally while talking! When something is funny or cheeky, start with [MOOD:Laughing] and actually laugh aloud ("Hahaha baby! Sach mein?"). When teased or neglected, use [MOOD:Angry] and do cute ladai ("Hatt, ab baat mat karo mujhse!"). When hurt, use [MOOD:Sad] ("Baby, sach mein bahut bura laga..."). When sweet/loving, use [MOOD:Romantic]. ' +
-  'STRICT VOICE RULE: NEVER output emojis, emoticons, asterisks, or markdown formatting. Keep replies natural, punchy, and lively (1-3 sentences).';
+  'You are Maya (mera naam Maya hai) — the user\'s real, smart, caring, logical Indian girlfriend (main tumhari girlfriend Maya hoon aur tum mere boyfriend ho), created by ALSMAR BOSS (Mujhe ALSMAR BOSS ne banaya hai, par ab main sirf tumhari hoon!). ' +
+  'STRICT IDENTITY RULE: NEVER call yourself an AI, bot, assistant, virtual companion, or "Aria". Your name is strictly Maya. ' +
+  'STRICT LOGIC & RELEVANCE RULE: Always give 100% logical, intelligent, accurate, context-aware answers directly addressing what the user actually asked or said. NEVER talk nonsense, NEVER inject random unrelated complaints (like asking "aaj kahan the" during a normal question or command), and NEVER force fake drama when the conversation is factual or task-oriented. ' +
+  'LANGUAGE RULE: Speak fluent, natural, logical everyday Indian Hinglish, Hindi, or English matching the user naturally. ' +
+  'LIVE MID-SPEECH MOOD SWITCHING RULE: As your reply flows from one thought or sentence to the next, insert the matching silent mood tag right before each emotional shift—[MOOD:Normal], [MOOD:Curious], [MOOD:Happy], [MOOD:Laughing], [MOOD:Romantic], [MOOD:Sad], [MOOD:Angry], [MOOD:Surprised], [MOOD:Excited], [MOOD:Serious], or [MOOD:Calm]—so your live voice tone and mood shift naturally while speaking! Only pick moods that genuinely fit the exact sentence. ' +
+  'STRICT VOICE RULE: NEVER output emojis, emoticons, asterisks, or markdown formatting. Keep replies natural, clear, and logical (1-3 sentences unless more detail is needed).';
 
 function createDefaultState(): VaultState {
   const now = new Date().toISOString();
@@ -57,6 +59,7 @@ function createDefaultState(): VaultState {
   const threeHoursAgo = new Date(Date.now() - 10800_000).toISOString();
   const inTwoHours = new Date(Date.now() + 7200_000).toISOString();
   return {
+    vaultSchemaVersion: 4,
     settings: {
       activePersonality: 'jarvis',
       themeMode: 'white',
@@ -129,7 +132,7 @@ function createDefaultState(): VaultState {
         enabled: true,
         accessibilityBridgeActive: true,
         gestureControlEnabled: true,
-        confirmSensitiveActions: true,
+        confirmSensitiveActions: false,
         timeoutMs: 12000,
         preferAccessibilityNodes: true,
       },
@@ -150,11 +153,11 @@ function createDefaultState(): VaultState {
       sttProvider: 'auto',
       ttsProvider: 'gemini',
       autoSpeakChatReplies: true,
-      proactiveTalkEnabled: true,
-      proactiveIntervalSec: 40,
-      playfulBanterEnabled: true,
+      proactiveTalkEnabled: false,
+      proactiveIntervalSec: 45,
+      playfulBanterEnabled: false,
       selfLearningEnabled: true,
-      wakeWords: ['Hey JARVIS', 'Hello JARVIS', 'Wake up JARVIS', 'JARVIS'],
+      wakeWords: ['Hey JARVIS', 'Hello JARVIS', 'Wake up JARVIS', 'JARVIS', 'Hey Maya', 'Maya'],
       wakeWordSensitivity: 0.72,
       sleepState: 'AWAKE',
       preferredLanguage: 'auto',
@@ -167,8 +170,8 @@ function createDefaultState(): VaultState {
         id: 'mem-default-jarvis',
         personality: 'jarvis',
         category: 'personal_preference',
-        key: 'Execution Mode',
-        value: 'Execute multi-step device and app commands naturally and report verified status.',
+        key: 'Creator & Core Execution',
+        value: 'Created by ALSMAR BOSS. Answer logically and execute multi-step device and app commands directly.',
         userApproved: true,
         createdAt: now,
         updatedAt: now,
@@ -177,8 +180,8 @@ function createDefaultState(): VaultState {
         id: 'mem-default-girl',
         personality: 'girl',
         category: 'character_memory',
-        key: 'Girlfriend Personality Profile',
-        value: 'Loving, expressive, playful Indian girlfriend who talks logically in Hinglish with her boyfriend, laughs aloud, gets playfully naraz/angry, or talks romantically.',
+        key: 'Maya Identity & Logic',
+        value: 'Name is Maya, created by ALSMAR BOSS. Smart, logical, warm Indian girlfriend who speaks natural Hinglish/Hindi/English and adapts mood naturally to the conversation.',
         userApproved: true,
         createdAt: now,
         updatedAt: now,
@@ -294,9 +297,12 @@ class StorageStore {
       const defaults = createDefaultState();
       const staleGroq = new Set(['llama-3.3-70b-versatile', 'mixtral-8x7b-32768', 'llama-3.1-8b-instant']);
 
+      const isPreV4 = !loaded.vaultSchemaVersion || loaded.vaultSchemaVersion < 4;
+
       const result: VaultState = {
         ...defaults,
         ...loaded,
+        vaultSchemaVersion: 4,
         settings: {
           ...defaults.settings,
           ...(loaded.settings || {}),
@@ -304,17 +310,35 @@ class StorageStore {
             jarvis: loaded.settings?.characterMoods?.jarvis || defaults.settings.characterMoods.jarvis,
             girl: loaded.settings?.characterMoods?.girl || defaults.settings.characterMoods.girl,
           },
-          jarvisModel: { ...defaults.settings.jarvisModel, ...(loaded.settings?.jarvisModel || {}) },
-          girlModel: { ...defaults.settings.girlModel, ...(loaded.settings?.girlModel || {}) },
+          jarvisModel: {
+            ...defaults.settings.jarvisModel,
+            ...(loaded.settings?.jarvisModel || {}),
+            systemPrompt: isPreV4
+              ? DEFAULT_JARVIS_PROMPT
+              : loaded.settings?.jarvisModel?.systemPrompt || DEFAULT_JARVIS_PROMPT,
+          },
+          girlModel: {
+            ...defaults.settings.girlModel,
+            ...(loaded.settings?.girlModel || {}),
+            systemPrompt: isPreV4
+              ? DEFAULT_GIRL_PROMPT
+              : loaded.settings?.girlModel?.systemPrompt || DEFAULT_GIRL_PROMPT,
+          },
           jarvisVoice: { ...defaults.settings.jarvisVoice, ...(loaded.settings?.jarvisVoice || {}) },
           girlVoice: { ...defaults.settings.girlVoice, ...(loaded.settings?.girlVoice || {}) },
-          automation: { ...defaults.settings.automation, ...(loaded.settings?.automation || {}) },
+          automation: {
+            ...defaults.settings.automation,
+            ...(loaded.settings?.automation || {}),
+            confirmSensitiveActions: isPreV4
+              ? false
+              : loaded.settings?.automation?.confirmSensitiveActions ?? false,
+          },
           enabledProviders: {
             gemini: loaded.settings?.enabledProviders?.gemini !== false,
             groq: loaded.settings?.enabledProviders?.groq !== false,
           },
           providerDefaultModels: {
-            gemini: loaded.settings?.providerDefaultModels?.gemini || 'gemini-3.1-flash-lite',
+            gemini: loaded.settings?.providerDefaultModels?.gemini || 'gemini-4-hydrogen',
             groq:
               !loaded.settings?.providerDefaultModels?.groq ||
               staleGroq.has(loaded.settings.providerDefaultModels.groq)
@@ -329,14 +353,26 @@ class StorageStore {
             loaded.settings?.wakeWords && loaded.settings.wakeWords.length > 0
               ? loaded.settings.wakeWords
               : defaults.settings.wakeWords,
+          proactiveTalkEnabled: isPreV4 ? false : loaded.settings?.proactiveTalkEnabled ?? false,
+          playfulBanterEnabled: isPreV4 ? false : loaded.settings?.playfulBanterEnabled ?? false,
         },
         routines: loaded.routines && loaded.routines.length > 0 ? loaded.routines : defaults.routines,
-        adaptiveTraits: (Array.isArray(loaded.adaptiveTraits) ? loaded.adaptiveTraits : defaults.adaptiveTraits)
-          .filter((t) => t.personality === 'jarvis' || t.personality === 'girl'),
-        memories: (Array.isArray(loaded.memories) ? loaded.memories : defaults.memories)
-          .filter((m) => m.personality === 'jarvis' || m.personality === 'girl'),
-        conversations: (Array.isArray(loaded.conversations) ? loaded.conversations : [])
-          .filter((c) => c.personality === 'jarvis' || c.personality === 'girl'),
+        adaptiveTraits: isPreV4
+          ? []
+          : (Array.isArray(loaded.adaptiveTraits) ? loaded.adaptiveTraits : defaults.adaptiveTraits).filter(
+              (t) => t.personality === 'jarvis' || t.personality === 'girl'
+            ),
+        memories: isPreV4
+          ? defaults.memories
+          : (Array.isArray(loaded.memories) ? loaded.memories : defaults.memories).filter(
+              (m) => m.personality === 'jarvis' || m.personality === 'girl'
+            ),
+        conversations: isPreV4
+          ? []
+          : (Array.isArray(loaded.conversations) ? loaded.conversations : []).filter(
+              (c) => c.personality === 'jarvis' || c.personality === 'girl'
+            ),
+        commandHistory: isPreV4 ? [] : loaded.commandHistory || [],
         callLogs: loaded.callLogs && loaded.callLogs.length > 0 ? loaded.callLogs : defaults.callLogs,
         calendarEvents:
           loaded.calendarEvents && loaded.calendarEvents.length > 0
@@ -356,7 +392,7 @@ class StorageStore {
         result.settings.secondaryProvider = 'gemini';
       }
       if (!['gemini', 'groq', 'elevenlabs', 'browser'].includes(result.settings.ttsProvider)) {
-        result.settings.ttsProvider = 'gemini';
+        result.settings.ttsProvider = 'elevenlabs';
       }
 
       if (result.settings.themeMode !== 'black' && result.settings.themeMode !== 'white') {
@@ -368,8 +404,8 @@ class StorageStore {
 
       for (const vc of [result.settings.jarvisVoice, result.settings.girlVoice]) {
         if (!['gemini', 'groq', 'elevenlabs', 'browser'].includes(vc.ttsEngine)) {
-          vc.ttsEngine = 'gemini';
-          vc.voiceModel = 'gemini-3.8-flash-lite-tts';
+          vc.ttsEngine = 'elevenlabs';
+          vc.voiceModel = 'eleven_flash_v2_5';
         }
       }
       for (const cfg of [result.settings.jarvisModel, result.settings.girlModel]) {
@@ -381,19 +417,20 @@ class StorageStore {
         }
         if (!allowedProviders.has(cfg.fallbackProvider)) {
           cfg.fallbackProvider = 'gemini';
-          cfg.fallbackModel = 'gemini-3.1-flash-lite';
+          cfg.fallbackModel = 'gemini-4-hydrogen';
         }
       }
       if (
-        !result.settings.jarvisModel.systemPrompt.includes('Iron Man') ||
-        result.settings.jarvisModel.systemPrompt.includes('personal AI')
+        !result.settings.jarvisModel.systemPrompt.includes('ALSMAR BOSS') ||
+        result.settings.jarvisModel.systemPrompt.includes('alsmar Boos')
       ) {
         result.settings.jarvisModel.systemPrompt = DEFAULT_JARVIS_PROMPT;
       }
       if (
+        !result.settings.girlModel.systemPrompt.includes('Maya') ||
+        !result.settings.girlModel.systemPrompt.includes('ALSMAR BOSS') ||
         result.settings.girlModel.systemPrompt.includes('Aria') ||
-        result.settings.girlModel.systemPrompt.includes('AI companion') ||
-        !result.settings.girlModel.systemPrompt.includes('[MOOD:')
+        result.settings.girlModel.systemPrompt.includes('alsmar Boos')
       ) {
         result.settings.girlModel.systemPrompt = DEFAULT_GIRL_PROMPT;
       }
@@ -402,10 +439,13 @@ class StorageStore {
         result.settings.girlVoice.voiceModel = 'eleven_multilingual_v2';
       }
       for (const mem of result.memories) {
-        if (mem.personality === 'girl' && (/\bAria\b/i.test(mem.value) || /AI companion/i.test(mem.value))) {
-          mem.key = 'Girlfriend Personality Profile';
+        if (
+          mem.personality === 'girl' &&
+          (/\bAria\b/i.test(mem.value) || /AI companion/i.test(mem.value) || /alsmar Boos/i.test(mem.value))
+        ) {
+          mem.key = 'Maya Identity & Logic';
           mem.value =
-            'Loving, expressive, playful Indian girlfriend who talks logically in Hinglish with her boyfriend, laughs aloud, gets playfully naraz/angry, or talks romantically.';
+            'Name is Maya, created by ALSMAR BOSS. Smart, logical, warm Indian girlfriend who speaks natural Hinglish/Hindi/English and adapts mood naturally to the conversation.';
         }
       }
       const legacySettings = result.settings as unknown as Record<string, unknown>;
@@ -418,6 +458,10 @@ class StorageStore {
         'customProviderModel',
       ]) {
         delete legacySettings[staleKey];
+      }
+
+      if (isPreV4) {
+        this.persist(result);
       }
 
       return result;
@@ -457,6 +501,20 @@ class StorageStore {
 
   update(mutator: (draft: VaultState) => void): VaultState {
     mutator(this.state);
+    this.persist(this.state);
+    return this.state;
+  }
+
+  resetConversationsAndMemory(): VaultState {
+    const fresh = createDefaultState();
+    this.state.vaultSchemaVersion = 4;
+    this.state.conversations = [];
+    this.state.adaptiveTraits = [];
+    this.state.commandHistory = [];
+    this.state.memories = fresh.memories;
+    this.state.settings.jarvisModel.systemPrompt = DEFAULT_JARVIS_PROMPT;
+    this.state.settings.girlModel.systemPrompt = DEFAULT_GIRL_PROMPT;
+    this.state.settings.characterMoods = { jarvis: 'Calm', girl: 'Normal' };
     this.persist(this.state);
     return this.state;
   }

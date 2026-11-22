@@ -12,10 +12,10 @@ export class VoiceAppControlEngine {
     const directive: AppControlDirective = { summaryNotes: [] };
     let matched = false;
 
-    // 1. Switch Mode / Character via Voice (Strictly JARVIS & AI Girl)
-    if (/\b(girlfriend|ai girl|girl|aria)\s*(mode|ban jao|bano|on|chalu|lagao|switch|kholo)\b|\bswitch to (girl|ai girl|aria)\b/i.test(lower)) {
+    // 1. Switch Mode / Character via Voice (Strictly JARVIS & Maya)
+    if (/\b(maya|girlfriend|ai girl|girl)\s*(mode|ban jao|bano|on|chalu|lagao|switch|kholo)\b|\bswitch to (maya|girl|ai girl)\b/i.test(lower)) {
       directive.switchPersonality = 'girl';
-      directive.summaryNotes.push('Switched mode to AI Girl');
+      directive.summaryNotes.push('Switched mode to Maya');
       matched = true;
     } else if (/\b(jarvis)\s*(mode|ban jao|bano|on|chalu|lagao|switch)\b|\bswitch to jarvis\b/i.test(lower)) {
       directive.switchPersonality = 'jarvis';

@@ -15,6 +15,7 @@ export const PermissionOnboardingModal: React.FC<PermissionOnboardingModalProps>
   onComplete,
 }) => {
   const [busyId, setBusyId] = useState<string | null>(null);
+  const [grantingAll, setGrantingAll] = useState(false);
 
   const primaryList = permissions.filter((p) =>
     [
@@ -35,6 +36,20 @@ export const PermissionOnboardingModal: React.FC<PermissionOnboardingModalProps>
     setBusyId(null);
   };
 
+  const handleAllowAll = async () => {
+    setGrantingAll(true);
+    try {
+      for (const perm of primaryList) {
+        if (perm.status !== 'ALLOWED') {
+          await requestBrowserPermission(perm.id);
+        }
+      }
+      await onRefreshPermissions();
+    } finally {
+      setGrantingAll(false);
+    }
+  };
+
   const getIcon = (id: string) => {
     if (id === 'microphone' || id === 'speech_recognition') {
       return <Mic className="w-5 h-5 text-blue-600 dark:text-cyan-400" />;
@@ -53,7 +68,7 @@ export const PermissionOnboardingModal: React.FC<PermissionOnboardingModalProps>
             Permission Setup
           </h2>
           <p className="mt-2 text-sm text-slate-600 dark:text-slate-400 leading-relaxed">
-            Allow Microphone, Camera, Location, Display Over Other Apps (Floating JARVIS Logo), and 24/7 Wake Lock. Created by alsmar Boos.
+            Allow Microphone, Camera, Location, Display Over Other Apps (Floating JARVIS Logo), and 24/7 Wake Lock. Created by ALSMAR BOSS.
           </p>
         </div>
 
@@ -95,7 +110,7 @@ export const PermissionOnboardingModal: React.FC<PermissionOnboardingModalProps>
                 </div>
                 <button
                   type="button"
-                  disabled={granted || busyId === perm.id}
+                  disabled={granted || busyId === perm.id || grantingAll}
                   onClick={() => handleRequest(perm.id)}
                   className={`shrink-0 min-h-[40px] px-4 py-2 rounded-xl text-xs font-semibold transition-colors whitespace-nowrap ${
                     granted
@@ -119,7 +134,15 @@ export const PermissionOnboardingModal: React.FC<PermissionOnboardingModalProps>
           })}
         </div>
 
-        <div className="mt-6 flex items-center justify-end gap-3">
+        <div className="mt-6 flex flex-wrap items-center justify-between gap-3">
+          <button
+            type="button"
+            disabled={grantingAll}
+            onClick={() => void handleAllowAll()}
+            className="min-h-[44px] px-5 py-2.5 rounded-xl bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-white text-sm font-semibold transition-all whitespace-nowrap disabled:opacity-60"
+          >
+            {grantingAll ? 'Allowing All...' : 'Allow All'}
+          </button>
           <button
             type="button"
             onClick={onComplete}

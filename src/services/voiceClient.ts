@@ -13,6 +13,7 @@ export interface ListeningCallbacks {
 export interface StreamSpeakCallbacks {
   onAmplitude: (level: number) => void;
   onSpeakStart?: () => void;
+  onEmotionChange?: (emotion: EmotionType) => void;
   onComplete: () => void;
   onError?: (message: string) => void;
 }
@@ -46,6 +47,7 @@ interface SpeechRecognitionLike {
 interface QueuedTtsChunk {
   index: number;
   text: string;
+  emotion: EmotionType;
   abortController: AbortController;
   promise: Promise<{ audioUrl?: string; text?: string; error?: string }>;
 }
@@ -472,6 +474,14 @@ class VoiceClient {
 
         callbacks.onTranscribing();
         const blob = new Blob(chunks, { type: recorder.mimeType || 'audio/webm' });
+        if (blob.size < 800) {
+          if (previewCaptured) {
+            callbacks.onFinalText(deduplicateTranscript(previewCaptured));
+          } else {
+            callbacks.onNoSpeech();
+          }
+          return;
+        }
 
         try {
           const base64DataUrl = await new Promise<string>((resolve, reject) => {
@@ -572,16 +582,16 @@ class VoiceClient {
             }
           } else if (
             this.speechDetected &&
-            now - firstVoiceAt > 160 &&
-            now - lastVoiceAt > 400
+            now - firstVoiceAt > 220 &&
+            now - lastVoiceAt > 850
           ) {
-            // Instant 400ms end-of-speech trigger
+            // Balanced 850ms end-of-speech trigger (prevents cutting off mid-sentence pauses)
             this.finishListeningAndProcess();
             return;
-          } else if (!this.speechDetected && elapsed > 5000) {
+          } else if (!this.speechDetected && elapsed > 7000) {
             this.finishListeningAndProcess();
             return;
-          } else if (elapsed > 18000) {
+          } else if (elapsed > 20000) {
             this.finishListeningAndProcess();
             return;
           }
@@ -777,12 +787,13 @@ class VoiceClient {
     const index = ++this.streamChunkCounter;
     const abortController = new AbortController();
     const { personality, voice, emotion } = this.streamParams;
+    const chunkEmotion: EmotionType = emotion || 'Normal';
 
     const promise = this.synthesizeChunk(
       speakable,
       personality,
       voice,
-      emotion,
+      chunkEmotion,
       abortController.signal,
       sessionId
     );
@@ -790,6 +801,7 @@ class VoiceClient {
     this.streamQueue.push({
       index,
       text: speakable,
+      emotion: chunkEmotion,
       abortController,
       promise,
     });
@@ -891,6 +903,7 @@ class VoiceClient {
       }
 
       if (resolved.error) {
+        this.streamParams?.callbacks.onEmotionChange?.(nextItem.emotion);
         if (this.streamParams?.voice.manualFallbackToBrowserTts && this.streamParams) {
           await this.playBrowserUtterance(
             nextItem.text,
@@ -906,6 +919,7 @@ class VoiceClient {
       }
 
       if (resolved.audioUrl && this.streamParams) {
+        this.streamParams.callbacks.onEmotionChange?.(nextItem.emotion);
         const played = await this.playAudioUrl(
           resolved.audioUrl,
           this.streamParams.voice,
@@ -921,6 +935,7 @@ class VoiceClient {
           );
         }
       } else if (resolved.text && this.streamParams) {
+        this.streamParams.callbacks.onEmotionChange?.(nextItem.emotion);
         await this.playBrowserUtterance(
           resolved.text,
           this.streamParams.voice,
@@ -956,7 +971,9 @@ class VoiceClient {
       const audioEl = this.sharedAudioEl || new Audio();
       this.sharedAudioEl = audioEl;
       audioEl.pause();
+      audioEl.setAttribute('playsinline', 'true');
       audioEl.src = url;
+      audioEl.currentTime = 0;
       audioEl.volume = Math.max(0, Math.min(1, voice.volume ?? 1));
       audioEl.playbackRate = Math.max(0.75, Math.min(1.4, voice.speed || 1));
 

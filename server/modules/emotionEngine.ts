@@ -94,32 +94,50 @@ class EmotionEngine {
     return userMood;
   }
 
+  detectSentenceMood(
+    sentenceText: string,
+    personality: PersonalityId,
+    currentMood: EmotionType
+  ): EmotionType {
+    const s = sentenceText.toLowerCase();
+    if (/\b(haha|hehe|hahaha|lol|funny|joke|mazak|hansi|hasi)\b/i.test(s)) return 'Laughing';
+    if (/\b(naraz|gussa|baat mat|hatt|chup|annoyed|jhagda|bakwas)\b/i.test(s)) return 'Angry';
+    if (/\b(ro |aansu|bura laga|udaas|dukh|hurt|sorry|maaf|miss)\b/i.test(s)) return 'Sad';
+    if (/\b(jaan|janu|pyaar|pyar|love you|dil se|miss you|hug|kiss|sweetheart)\b/i.test(s)) return 'Romantic';
+    if (/\b(wow|omg|kya baat|sach mein|really\?!|surprised|hairan)\b/i.test(s)) return 'Surprised';
+    if (/\b(yay|awesome|amazing|excited|maza|great news|let's go)\b/i.test(s)) return 'Excited';
+    if (/\b(warning|error|alert|careful|serious|dhyan|important|check)\b/i.test(s)) return 'Serious';
+    if (/\b(kahan|kyon|kyu|kaise|kab|why|how|what|batao|puchho)\b|\?$/i.test(s)) return 'Curious';
+    if (/\b(khush|badhiya|badiya|great|good|happy|bilkul|zaroor|welcome)\b/i.test(s)) return 'Happy';
+    return currentMood || (personality === 'jarvis' ? 'Calm' : 'Normal');
+  }
+
   buildPromptDirective(emotion: EmotionType, intensity: number, personality: PersonalityId): string {
     const level = intensity >= 0.75 ? 'expressive' : intensity >= 0.4 ? 'balanced' : 'subtle';
     if (personality === 'girl') {
       const moodGuide: Record<EmotionType, string> = {
         Normal:
-          'Be natural, caring, and curious like a real girlfriend talking to her boyfriend ("baby" / "jaan"). Ask logical follow-up questions like where he was or what he is doing.',
+          'Be Maya: logical, natural, warm, and smart with your boyfriend. Answer directly and accurately without filler.',
         Happy:
-          'Sound genuinely cheerful, bubbly, and affectionate toward your boyfriend ("baby", "jaan"). Share happy energy and banter warmly.',
+          'Be Maya: genuinely cheerful, warm, and upbeat while keeping your answer 100% logical and helpful.',
         Laughing:
-          'Actually laugh out loud naturally ("Haha!", "Hahaha! Ruko hassi nahi ruk rahi!") and tease your boyfriend playfully with high energy.',
+          'Be Maya: chuckle naturally where genuinely funny while staying logical and on-topic.',
         Romantic:
-          'Be deeply romantic, soft, loving, flirty, and sweet with your boyfriend—call him "baby", "jaan", or "janu", express how much you missed him and adore him.',
+          'Be Maya: warm, affectionate, and sweet ("jaan", "baby") while answering directly and logically.',
         Sad:
-          'Sound genuinely emotional, hurt, and tearful like a real girlfriend who feels neglected—softly complain ("Baby, sach mein bura laga...", "Aankhon mein aansu aa gaye...") and ask why he made you sad.',
+          'Be Maya: empathetic, gentle, and caring if the topic is emotional or sad.',
         Angry:
-          'Get genuinely naraz and feisty like a real girlfriend fighting with her boyfriend ("Hatt, ab baat mat karo!", "Aaj kahan the itni der tak?", "Bahut gussa aa raha hai mujhe!"). Show cute attitude, question him logically, and do playful ladai.',
+          'Be Maya: playfully annoyed or firm if genuinely teased, while still answering clearly.',
         Curious:
-          'Question your boyfriend like a sharp, caring girlfriend ("Wait baby, aaj kahan gayab the?", "Itni der mein kyon aaye?", "Sach sach batao kya kar rahe the?").',
+          'Be Maya: attentive, inquisitive, and thoughtful about what the user said.',
         Surprised:
-          'React dramatically with genuine girlfriend surprise ("Kya?! Sach mein baby? Mujhe yakeen nahi ho raha!").',
+          'Be Maya: react with natural surprise while addressing the user\'s point logically.',
         Excited:
-          'Sound super hyped, happy, and enthusiastic with your boyfriend ("Yay! Baby maza aa jayega!").',
+          'Be Maya: energetic and enthusiastic when sharing good news or plans.',
         Serious:
-          'Speak earnestly and seriously like a supportive partner checking on her boyfriend.',
+          'Be Maya: focused, grounded, and serious—deliver facts cleanly without jokes.',
         Calm:
-          'Speak softly, warmly, and peacefully with your boyfriend like a relaxing evening chat.',
+          'Be Maya: calm, reassuring, and steady.',
       };
       return (
         `Current Mood: ${emotion} (${level}). ` +
@@ -129,7 +147,7 @@ class EmotionEngine {
 
     return (
       `Current Mood: ${emotion} (${level}). ` +
-      `Respond like Tony Stark's Iron Man JARVIS: sharp, ultra-intelligent, witty, composed, calling the user Sir or Boss.`
+      `Respond like Tony Stark's Iron Man JARVIS (created by ALSMAR BOSS): sharp, ultra-intelligent, 100% logical, composed, calling the user Sir or Boss.`
     );
   }
 
@@ -137,8 +155,8 @@ class EmotionEngine {
     const scale = intensity >= 0.75 ? 'strongly' : intensity >= 0.4 ? 'naturally' : 'gently';
     const baseRole =
       personality === 'jarvis'
-        ? 'sharp, classy, intelligent, witty British-toned Iron Man JARVIS companion'
-        : 'real, warm, expressive, lively human girlfriend talking to her boyfriend';
+        ? 'sharp, classy, intelligent British-toned Iron Man JARVIS companion'
+        : 'real, smart, warm, expressive human girlfriend Maya';
 
     const map: Record<EmotionType, string> = {
       Normal: `Speak as a ${baseRole} with natural conversational pacing and clear human cadence.`,
@@ -146,12 +164,12 @@ class EmotionEngine {
       Romantic: `Speak as a ${baseRole} sounding ${scale} warm, affectionate, charming, soft, and captivating.`,
       Sad:
         personality === 'girl'
-          ? `Speak as a ${baseRole} sounding ${scale} emotional, pouting, vulnerable, and softly tearful with gentle breath pauses.`
+          ? `Speak as a ${baseRole} sounding ${scale} emotional, soft, and empathetic with gentle pauses.`
           : `Speak as a ${baseRole} sounding ${scale} tender, subdued, and empathetic with thoughtful pauses.`,
-      Angry: `Speak as a ${baseRole} sounding ${scale} annoyed, fiesty, sulky, and expressive while keeping human charm.`,
-      Laughing: `Speak as a ${baseRole} sounding ${scale} amused, giggling or chuckling naturally with lively energy.`,
+      Angry: `Speak as a ${baseRole} sounding ${scale} firm, expressive, and annoyed while keeping human charm.`,
+      Laughing: `Speak as a ${baseRole} sounding ${scale} amused, chuckling naturally with lively energy.`,
       Curious: `Speak as a ${baseRole} sounding ${scale} inquisitive, intrigued, and attentive.`,
-      Surprised: `Speak as a ${baseRole} sounding ${scale} amazed and caught off guard with lively inflection.`,
+      Surprised: `Speak as a ${baseRole} sounding ${scale} amazed and lively.`,
       Excited: `Speak as a ${baseRole} sounding ${scale} energetic, enthusiastic, and upbeat.`,
       Serious: `Speak as a ${baseRole} sounding ${scale} focused, composed, and steady.`,
       Calm: `Speak as a ${baseRole} sounding ${scale} calm, steady, reassuring, and poised.`,

@@ -71,8 +71,8 @@ interface SendOptions {
 const SETTINGS_BACKUP_KEY = 'jarvis_settings_backup_v3';
 
 const CHARACTER_META: Record<PersonalityId, { label: string; title: string; subtitle: string }> = {
-  jarvis: { label: 'JARVIS', title: 'JARVIS', subtitle: 'Created by alsmar Boos' },
-  girl: { label: 'AI Girl', title: 'AI Girl · Girlfriend', subtitle: 'Created by alsmar Boos' },
+  jarvis: { label: 'JARVIS', title: 'JARVIS', subtitle: 'Created by ALSMAR BOSS' },
+  girl: { label: 'Maya · AI Girl', title: 'Maya', subtitle: 'Created by ALSMAR BOSS' },
 };
 
 const EMOTIONS: EmotionType[] = [
@@ -618,6 +618,19 @@ export default function App() {
           setOrbState('SPEAKING');
           setVoicePhaseLabel(`Speaking (${activeVoice.voiceName})...`);
         },
+        onEmotionChange: (spokenMood) => {
+          setSettings((prev) =>
+            prev
+              ? {
+                  ...prev,
+                  characterMoods: {
+                    ...prev.characterMoods,
+                    [effectivePersonality]: spokenMood,
+                  },
+                }
+              : prev
+          );
+        },
         onAmplitude: (amp) => setAudioLevel(amp),
         onComplete: () => {
           setAudioLevel(0);
@@ -774,20 +787,26 @@ export default function App() {
             if (nextMood) {
               finalEmotion = nextMood;
               voiceClient.setStreamEmotion(nextMood);
-              setSettings((prev) =>
-                prev
-                  ? {
-                      ...prev,
-                      characterMoods: {
-                        ...prev.characterMoods,
-                        [effectivePersonality]: nextMood,
-                      },
-                    }
-                  : prev
-              );
+              if (!shouldSpeakStreaming) {
+                setSettings((prev) =>
+                  prev
+                    ? {
+                        ...prev,
+                        characterMoods: {
+                          ...prev.characterMoods,
+                          [effectivePersonality]: nextMood,
+                        },
+                      }
+                    : prev
+                );
+              }
             }
           } else if (eventType === 'delta') {
             const deltaText = payload.text || '';
+            const deltaMood = payload.emotion as EmotionType | undefined;
+            if (shouldSpeakStreaming && deltaMood) {
+              voiceClient.setStreamEmotion(deltaMood);
+            }
             streamedText += deltaText;
             setLastSpokenCaption(streamedText);
             if (shouldSpeakStreaming && deltaText) {
@@ -1082,7 +1101,7 @@ export default function App() {
                   </p>
                   <p className="text-[11px] text-slate-500 dark:text-slate-400 truncate mt-0.5">
                     {activePersonality === 'girl'
-                      ? `Girlfriend Mode · ${currentEmotion}`
+                      ? `Maya · ${currentEmotion}`
                       : `Iron Man Core · ${currentEmotion}`}
                   </p>
                 </div>
@@ -1384,7 +1403,7 @@ export default function App() {
               {/* Creator Attribution */}
               <div className="flex items-center justify-center gap-1.5 text-[11px] font-semibold text-slate-500 dark:text-slate-400 pt-1">
                 <Sparkles className="w-3.5 h-3.5 text-blue-600 dark:text-cyan-400" />
-                <span>Created by alsmar Boos</span>
+                <span>Created by ALSMAR BOSS</span>
               </div>
             </div>
           </div>
@@ -1594,13 +1613,13 @@ export default function App() {
               <div className="rounded-3xl jarvis-surface p-8 text-center">
                 <h2 className="font-display text-lg font-bold text-slate-900 dark:text-white">
                   {activePersonality === 'girl'
-                    ? 'Tumhari Girlfriend Ready Hai'
+                    ? 'Maya Ready Hai'
                     : 'JARVIS Online Hai, Sir'}
                 </h2>
                 <p className="text-xs text-slate-600 dark:text-slate-400 mt-1.5 max-w-md mx-auto leading-relaxed">
                   {activePersonality === 'girl'
-                    ? 'Baby, baat karo — Normal, Romantic, Laughing, Sad ya Angry mood shabdon ke hisab se khud change hoga.'
-                    : 'Created by alsmar Boos — koi bhi sawal poochhein, phone commands chalaiye, ya Iron Man style voice mein baat karein.'}
+                    ? 'Main Maya hoon, created by ALSMAR BOSS — logical aur natural baat karo, bolte-bolte mood baat ke hisab se khud change hoga.'
+                    : 'Created by ALSMAR BOSS — koi bhi logical sawal poochhein, phone commands chalaiye, ya Iron Man style voice mein baat karein.'}
                 </p>
               </div>
             ) : (
@@ -1730,6 +1749,17 @@ export default function App() {
             permissions={permissions}
             onUpdateSettings={updateSettings}
             onRefreshPermissions={refreshPermissions}
+            onResetMemory={async () => {
+              setActiveThreadId(null);
+              setMessages([]);
+              setTaskSummary(null);
+              setActivePlanSteps([]);
+              const setResp = await fetch('/api/settings');
+              if (setResp.ok) {
+                const updated = (await setResp.json()) as AppSettingsPayload;
+                setSettings(updated);
+              }
+            }}
           />
         )}
       </main>
